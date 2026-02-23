@@ -141,30 +141,144 @@ inter-observer variability.
 
 ---
 
-## Architecture
+## Agentic Pipeline
+
+project_echo operates as an **agentic cardiology department in software** —
+a multi-stage pipeline where specialized models measure, verify, validate,
+and synthesize, mirroring the real clinical workflow of sonographer →
+technician → attending cardiologist → report.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    project_echo Pipeline                             │
 │                                                                      │
-│  LAYER 1 — MEASURE                                                   │
-│  AVI → VideoMAE [3] (MCG-NJU/videomae-base, frozen) → (16, 768)     │
-│  → Model Garden: TCN + Temporal + MultiTask + MLP (4 per view)       │
-│  → Weighted ensemble EF                                              │
+│  LAYER 1 — MEASURE (Specialist Roundtable)                           │
+│  AVI → VideoMAE [3] (frozen, 86M params) → (16, 768) embeddings     │
+│  → 4 Specialists vote: TCN + Temporal + MultiTask + MLP              │
+│  → Weighted ensemble EF ± inter-specialist σ                         │
 │                                                                      │
-│  LAYER 1.5 — GEOMETRIC VERIFICATION                                  │
-│  AVI → DeepLabV3 [4] segmentation → LV area → Calibrated EF         │
-│  → Graduated blend with regression EF                                │
+│  LAYER 1.5 — GEOMETRIC VERIFICATION (DeepLabV3 Segmentation)        │
+│  AVI → DeepLabV3 [4] → LV mask per frame → ED/ES area               │
+│  → Calibrated geometric EF → Graduated blend with regression EF      │
 │                                                                      │
-│  LAYER 2 — VALIDATE                                                  │
-│  MedGemma 4B VLM [2] ("Senior Attending")                             │
+│  LAYER 2 — VALIDATE (MedGemma VLM Critic)                            │
+│  MedGemma 4B [2] as "Senior Attending Cardiologist"                   │
+│  Receives: specialist votes + key frames + clinical context           │
 │  → AGREE / UNCERTAIN / DISAGREE + LV description + reasoning         │
 │                                                                      │
-│  LAYER 3 — SYNTHESIZE                                                │
-│  Dual-View Fusion (A4C + PSAX) → Conservative consensus             │
-│  → Age-adjusted Z-scores + BSA indexing + Clinical narrative          │
+│  LAYER 3 — SYNTHESIZE (Clinical Report)                              │
+│  Dual-view fusion + age-adjusted Z-scores + BSA indexing              │
+│  → Structured pediatric echo report with confidence intervals         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+### Layer 1: Specialist Roundtable — 4 Architectures, 1 Ensemble
+
+Each echo video passes through a **frozen VideoMAE encoder** [3] (MCG-NJU/videomae-base,
+pre-trained on Kinetics-400 action videos — no medical data). This produces
+spatiotemporal embeddings of shape `(16, 768)` — 16 frames × 768-dimensional
+feature vectors capturing both spatial anatomy and temporal motion patterns.
+
+Four lightweight regression heads then independently estimate EF, each bringing
+a different inductive bias — like four specialists reading the same study:
+
+| Specialist | Architecture | Why It Exists | A4C MAE | PSAX MAE |
+|---|---|---|---|---|
+| **Pattern Matcher** | TCN (dilated convolutions) | Captures multi-scale temporal patterns (dilation 1,2,4,8) | **5.49%** | 5.14% |
+| **Motion Analyst** | Temporal Transformer (2-layer, 8-head) | Attends to frame-to-frame motion relationships | 5.78% | **5.08%** |
+| **Guardrail** | Multi-Task (regression + classification) | Joint loss prevents extreme outliers via category bounds | 6.14% | 5.43% |
+| **Baseline** | MLP (mean-pooled) | Ablation anchor — proves temporal modeling helps | 6.55% | 5.64% |
+
+The ensemble combines predictions using performance-weighted voting:
+
+$$w_i = \frac{1}{\text{MAE}_i} \times (1 + R^2_i) \times (1 + \text{ClinAcc}_i)$$
+
+The **inter-specialist standard deviation (σ)** serves as an uncertainty signal:
+low σ (< 3%) means all four agree → high confidence; high σ (> 8%) means
+disagreement → the case needs closer review. Specialists deviating > 10% from
+the consensus are flagged as outliers in the UI.
+
+### Layer 1.5: Geometric EF — DeepLabV3 LV Segmentation
+
+Independent of the regression ensemble, project_echo computes a **physics-based
+geometric EF** by segmenting the left ventricle in every video frame:
+
+1. **Segmentation:** DeepLabV3-MobileNetV3 [4] models trained on expert LV
+   contours from EchoNet-Pediatric's VolumeTracings.csv (A4C IoU = 0.809,
+   PSAX IoU = 0.828)
+2. **ED/ES Detection:** The frames with maximum and minimum LV area are
+   identified as end-diastole and end-systole
+3. **Area-Based EF:** $\text{EF}_\text{geo} = \frac{A_\text{ED} - A_\text{ES}}{A_\text{ED}} \times 100$
+4. **Linear Calibration:** Corrects systematic bias (A4C: slope=0.378,
+   intercept=46.66; PSAX: slope=0.752, intercept=20.66)
+5. **Graduated Ensemble Blending:** Geometric and regression EF are combined
+   with trust weights that vary by EF range:
+
+| EF Range | Geometric Weight | Regression Weight | Rationale |
+|---|---|---|---|
+| < 40% (reduced) | **80%** | 20% | Structural abnormality → geometric more reliable |
+| 40–55% (borderline) | 50% | 50% | Equal trust in transition zone |
+| > 55% (normal) | 30% | **70%** | Regression more precise in normal range |
+
+This graduated blending achieves **MAE 4.97%** on PSAX — our best single-view
+result — and **65.8% sensitivity for abnormal EF** (highest of any method),
+because the geometric approach directly measures what clinicians care about:
+how much the ventricle actually shrinks.
+
+### Layer 2: MedGemma VLM Critic — "Senior Attending" Visual Validation
+
+MedGemma 4B [2] serves as the **agentic intelligence** of project_echo — not
+predicting EF (VLM text generation failed; see table above), but acting as a
+**senior attending cardiologist** who reviews the junior team's work.
+
+**What MedGemma receives:**
+- 3 key frames at 448×448 resolution (end-diastole, mid-systole, end-systole)
+- All 4 specialist predictions with their role labels and architectures
+- Ensemble EF with inter-specialist σ and outlier flags
+- Clinical context: patient age, sex, BSA, and age-adjusted Z-score
+- Sigma guidance text (low/moderate/high agreement interpretation)
+
+**What MedGemma produces:**
+- **LV Description:** What the VLM observes in the images (wall motion,
+  chamber size, contractility assessment)
+- **Clinical Verdict:** `AGREE` / `UNCERTAIN` / `DISAGREE` with natural
+  language reasoning explaining *why*
+
+**How the verdict adjusts confidence:**
+
+| Verdict | Confidence Multiplier | Interpretation |
+|---|---|---|
+| `AGREE` | ×1.10 | VLM confirms — visual appearance matches predicted EF |
+| `UNCERTAIN` | ×0.85 | Image quality or borderline findings — flag for review |
+| `DISAGREE` | ×0.60 | VLM sees something the regression missed — needs attention |
+
+This is the core **agentic pattern**: MedGemma doesn't replace the specialists,
+it *supervises* them — exactly as an attending physician would review a trainee's
+measurements before signing the report. The VLM's medical image understanding
+(trained on CXR, CT, histopathology, ophthalmology [2]) transfers to echo
+despite zero echo training data, enabling it to assess LV contractility,
+chamber proportions, and wall motion qualitatively.
+
+### Layer 3: Clinical Synthesis — Dual-View Fusion & Reporting
+
+When both A4C and PSAX videos are available, project_echo fuses them
+conservatively, mirroring how cardiologists integrate multiple acoustic windows:
+
+- **Primary view** = the view with the **lower EF** (more pathological) —
+  in clinical practice, you always act on the more concerning reading
+- **|ΔEF| > 10%** triggers a disagreement flag with reduced confidence,
+  alerting the clinician to a potential technical issue or true regional dysfunction
+- **Age-adjusted Z-scores** normalize the EF relative to pediatric norms
+  (neonates, infants, toddlers, children, adolescents have different thresholds)
+- **BSA indexing** accounts for body surface area in the clinical narrative
+
+The final output is a **structured pediatric echo report** with:
+- EF estimate ± confidence interval (8 specialist votes)
+- Age-adjusted Z-score and clinical category (normal/borderline/reduced/hyperdynamic)
+- Geometric EF cross-check with graduated blending details
+- MedGemma VLM visual validation with LV description and reasoning
+- Dual-view fusion with any disagreement flags
+- Natural language clinical narrative suitable for the medical record
 
 ---
 
