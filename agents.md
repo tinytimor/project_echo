@@ -496,7 +496,7 @@ MAE of 5.08–5.49% is within the range of inter-observer variability
 reported in expert-vs-expert comparisons, making it a clinically meaningful
 benchmark for automated assessment.
 
-### 6.3 Pediatric EF Norms (Age-Adjusted)
+### 6.3 Pediatric EF Norms (Age-Adjusted) [10]
 
 | Age Group | Normal EF | Borderline | Reduced |
 |---|---|---|---|

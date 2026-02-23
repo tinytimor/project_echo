@@ -35,7 +35,6 @@ Thumbs.db
 # ─── Logs / outputs ─────────────────────────────────────────────────────────
 logs/
 results/
-figures/
 *.log
 wandb/
 

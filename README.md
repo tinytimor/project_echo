@@ -27,6 +27,35 @@ Garden, geometric EF via LV segmentation, and MedGemma 4B VLM visual validation.
 
 ---
 
+## Example: Real-Time AI Segmentation of the Left Ventricle
+
+project_echo uses DeepLabV3 to automatically segment the left ventricle (LV) in
+every frame of a pediatric echocardiogram, then computes ejection fraction from
+the area change between end-diastole (max filling) and end-systole (max contraction).
+
+### A4C View — Apical Four-Chamber
+
+<video src="figures/a4c_segmentation.mp4" autoplay loop muted playsinline width="610">
+  Your browser does not support the video tag.
+</video>
+
+*Real-time LV segmentation on the A4C view. **Top:** Normal cardiac function
+(EF ≈ 65%) — the ventricle contracts vigorously from ED to ES. **Bottom:**
+Severely reduced function (EF ≈ 25%) — minimal wall motion, the ventricle
+barely squeezes. Green overlay = AI-detected LV boundary.*
+
+### PSAX View — Parasternal Short-Axis
+
+<video src="figures/psax_segmentation.mp4" autoplay loop muted playsinline width="610">
+  Your browser does not support the video tag.
+</video>
+
+*Cross-sectional "donut" view. The AI segments the circular LV cross-section
+and tracks area change across the cardiac cycle. PSAX achieves our best
+segmentation IoU (0.828) due to the near-circular geometry.*
+
+---
+
 ## Model Accuracy
 
 All models trained exclusively on EchoNet-Pediatric data [1] (7,810 videos).
