@@ -41,6 +41,111 @@ interpretation.
 
 ---
 
+### Related Work & Inspiration
+
+project_echo's agentic architecture draws direct inspiration from two
+pioneering healthcare AI frameworks, and builds upon the foundational
+pediatric echocardiography research that produced our training dataset.
+
+#### Multi-Agent Healthcare Orchestration
+
+**Microsoft Research Healthcare Agent Orchestrator** [13,14]. In May 2025,
+Microsoft Research introduced the Healthcare Agent Orchestrator — a multi-agent
+framework for clinical decision support that mirrors the structure of real
+multidisciplinary team meetings. The system coordinates specialized AI agents
+(radiology, pathology, genomics, clinical trials, patient history) through an
+orchestrator that manages shared context, assigns tasks, resolves conflicting
+outputs, and maintains traceability across agents. Developed in collaboration
+with Stanford Health Care, Johns Hopkins, Providence Genomics, and Mass General
+Brigham, the framework demonstrated that healthcare AI systems must be
+*collaborative* rather than monolithic — reflecting how clinical decisions
+actually emerge from structured dialogue between specialists [13]. The
+architecture explicitly addressed the limitations of single-agent systems:
+error propagation across agents, agent selection optimization ("more agents are
+not always better"), and the need for transparent hand-offs with visible
+intermediate reasoning [14]. project_echo adapts this multi-specialist
+orchestration pattern to pediatric echocardiography: our 4-architecture
+Model Garden (TCN, Temporal Transformer, Multi-Task, MLP) functions as a
+specialist roundtable — each model contributes independent expertise on EF
+estimation, their predictions are surfaced with agreement metrics (inter-specialist σ),
+and MedGemma serves as the orchestrating "Senior Attending" who reviews the
+collective output and issues a supervisory verdict.
+
+**Google Research Personal Health Agent (PHA)** [15]. In September 2025,
+Google Research proposed a Personal Health Agent framework that decomposes
+personal health support into three specialist sub-agents — a data scientist,
+a domain expert, and a health coach — coordinated by an intelligent
+orchestrator. The key finding was that multi-agent collaboration
+"significantly outperformed the sum of its parts" compared to both single-agent
+systems and parallel multi-agent baselines without dynamic orchestration [15].
+This validated a core design principle that project_echo shares: specialist
+agents with distinct inductive biases (our TCN for temporal patterns vs.
+Transformer for motion attention vs. Multi-Task for classification guardrails),
+coordinated through structured ensemble weighting and VLM-based supervisory review,
+produce more reliable outputs than any single model alone.
+
+**Google Cloud Agentic AI for Life Sciences** [16]. Google Cloud's November
+2025 framework for drug discovery R&D positions MedGemma as "the strategic
+intelligence agent" — a specialized knowledge agent that executes deep search
+and synthesis across biomedical data when directed by a cognitive orchestrator
+(Gemini 2.5 Pro) [16]. This hierarchical pattern — where MedGemma provides
+domain-specific medical reasoning under orchestrator direction — directly
+inspired project_echo's Layer 2 design. In our system, the regression ensemble
+(Layer 1) and geometric segmentation (Layer 1.5) provide quantitative
+measurements, while MedGemma acts as the medical intelligence layer that
+visually validates whether those measurements are consistent with what it
+observes in the echo frames — a critic, not a predictor.
+
+#### Prior AI Research on Pediatric Echocardiography
+
+**EchoNet-Pediatric (Reddy et al., 2023)** [6]. The foundational work that
+produced our training dataset introduced a video-based deep learning approach
+using an (2+1)D ResNet architecture for automated pediatric EF assessment.
+Trained on 7,643 labeled echocardiogram videos from Lucile Packard Children's
+Hospital at Stanford, the model achieved expert-level performance in LV
+segmentation and EF estimation. The dataset includes both A4C and PSAX views
+with expert LV tracings at end-diastole and end-systole, using the "5/6 Area
+Length" (bullet) method for ground-truth EF computation [6]. project_echo
+extends this work in three significant directions: (1) we replace the (2+1)D
+ResNet with frozen VideoMAE [7] spatiotemporal embeddings fed to lightweight
+regression heads, achieving comparable accuracy with dramatically fewer
+trainable parameters (~1–22M vs. the full end-to-end CNN); (2) we introduce a
+multi-model ensemble (4 architectures per view) that provides uncertainty
+quantification via inter-specialist agreement; and (3) we add an agentic
+validation layer (MedGemma VLM) and geometric cross-check (DeepLabV3
+segmentation) that the original single-model approach lacks.
+
+**EchoNet-Dynamic (Ouyang et al., 2020)** [17]. The adult predecessor to
+EchoNet-Pediatric demonstrated that deep learning could match expert
+cardiologists in EF assessment from echocardiography videos, achieving MAE of
+4.1% on 10,030 adult studies. The key insight — that temporal video information
+captures cardiac contractile function better than single-frame analysis —
+directly informed our use of VideoMAE (a video-native encoder with temporal
+masking pre-training) rather than per-frame image encoders. However, models
+trained on adult data do not generalize well to pediatric populations due to
+faster heart rates, smaller cardiac structures, and greater anatomical
+variability [6], motivating our pediatric-only training strategy.
+
+**Transfer Learning for Pediatric Cardiac Assessment** [18]. Adhikari et al.
+(2025) applied transfer learning to predict CMR-derived LVEF from
+echocardiographic videos in children with Tetralogy of Fallot, demonstrating
+that pre-trained adult echocardiography models can be adapted for specific
+pediatric populations. This work reinforces project_echo's approach of using
+pre-trained video encoders (VideoMAE, trained on non-medical action recognition
+videos) as feature extractors, then training lightweight task-specific heads on
+pediatric data — a strategy that preserves general spatiotemporal understanding
+while adapting to the pediatric domain without requiring massive labeled
+datasets.
+
+Collectively, these works establish that (1) agentic multi-specialist
+architectures outperform monolithic models in healthcare AI, (2) MedGemma is
+effective as a supervisory intelligence agent rather than a direct predictor,
+and (3) pediatric echocardiography presents unique challenges that demand
+dedicated models and validation strategies. project_echo synthesizes all three
+insights into a unified system.
+
+---
+
 ### Overall Solution: MedGemma as the Central Agentic Intelligence
 
 project_echo uses **MedGemma 4B** [4,5] as the **centerpiece** of an agentic clinical
@@ -638,3 +743,34 @@ The ensemble provides two critical properties:
     Mor-Avi V, et al. "Recommendations for Cardiac Chamber Quantification
     by Echocardiography in Adults." *J Am Soc Echocardiogr*. 2015;28(1):1–39.
     https://doi.org/10.1016/j.echo.2014.10.003
+
+13. **Microsoft Research Healthcare Agent Orchestrator:** Lungren M.
+    "Developing next-generation cancer care management with multi-agent
+    orchestration." Microsoft Industry Blog, May 19, 2025.
+    https://www.microsoft.com/en-us/industry/blog/healthcare/2025/05/19/developing-next-generation-cancer-care-management-with-multi-agent-orchestration/
+
+14. **Healthcare Agent Orchestrator Architecture:** Gu Y (Aiden), Mandel J,
+    Wei M. "Healthcare Agent Orchestrator: Multi-agent Framework for
+    Domain-Specific Decision Support." Microsoft Tech Community, May 22, 2025.
+    https://techcommunity.microsoft.com/blog/healthcareandlifesciencesblog/healthcare-agent-orchestrator-multi-agent-framework-for-domain-specific-decision/4416668
+
+15. **Google Research Personal Health Agent:** Xu X "Orson", Heydari A.
+    "The anatomy of a personal health agent." Google Research Blog,
+    September 30, 2025. Paper: https://arxiv.org/abs/2508.20148
+    https://research.google/blog/the-anatomy-of-a-personal-health-agent/
+
+16. **Google Cloud Agentic AI for Life Sciences:** Mehrotra P, Ledsam J.
+    "Four agentic workflows you can build for life sciences for R&D."
+    Google Cloud Blog, November 21, 2025.
+    https://cloud.google.com/blog/topics/healthcare-life-sciences/agentic-ai-framework-in-life-sciences-for-rd
+
+17. **EchoNet-Dynamic (Adult Echocardiography):** Ouyang D, He B, Ghorbani A,
+    et al. "Video-based AI for beat-to-beat assessment of cardiac function."
+    *Nature*. 2020;580:252–256.
+    https://doi.org/10.1038/s41586-020-2145-8
+
+18. **Transfer Learning for Pediatric Cardiac Assessment:** Adhikari A,
+    Wesley GV III, Nguyen MB, Doan TT, et al. "Predicting cardiac magnetic
+    resonance-derived ejection fraction from echocardiogram via deep learning
+    approach in Tetralogy of Fallot." *Pediatric Cardiology*. 2025.
+    https://doi.org/10.1007/s00246-025-03802-y
