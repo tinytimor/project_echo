@@ -125,14 +125,21 @@ Key dependencies installed by `pip install -e .`:
 - `numpy`, `pandas`, `scikit-learn` — data handling
 - `fastapi`, `uvicorn` — demo API server
 
-### 2. Download MedGemma 4B
+### 2. Download Models
 
 ```bash
-# Requires Hugging Face token with MedGemma access
-# Accept terms at: https://huggingface.co/google/medgemma-4b-it
-pip install huggingface_hub
-huggingface-cli download google/medgemma-4b-it --local-dir ./local_models/medgemma-4b
+# 1. Accept the MedGemma license: https://huggingface.co/google/medgemma-4b-it
+# 2. Add your Hugging Face token to .env:
+echo "HF_TOKEN=hf_your_token_here" >> .env
+
+# 3. Run the download script (downloads MedGemma 4B + pre-caches VideoMAE):
+bash download_models.sh
+
+# Or skip the VLM if you only need regression inference:
+bash download_models.sh --skip-vlm
 ```
+
+See [local_models/README.md](local_models/README.md) for details on each model.
 
 ### 3. Download EchoNet-Pediatric Dataset
 

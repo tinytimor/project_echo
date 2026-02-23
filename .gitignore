@@ -1,8 +1,14 @@
-# ─── Large files / datasets ──────────────────────────────────────────────────
-data/
-local_models
-local_models/
-checkpoints/
+# ─── Large files / datasets (download separately — see README) ───────────────
+data/*
+!data/README.md
+local_models/*
+!local_models/README.md
+
+# Note: checkpoints/ IS tracked (471 MB total, all files < 100 MB GitHub limit)
+# The 8 specialist .pt files + 2 segmentation models + calibration JSONs are
+# required for inference and are small enough for git.
+# Exclude training artifacts (only best_model.pt is needed for inference):
+checkpoints/**/final_model.pt
 
 # ─── Python ──────────────────────────────────────────────────────────────────
 .venv/

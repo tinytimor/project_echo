@@ -383,6 +383,7 @@ correctly regardless of working directory.
 | File | Purpose |
 |---|---|
 | `train.sh` | Unified training pipeline |
+| `download_models.sh` | Downloads MedGemma 4B + pre-caches VideoMAE (reads HF_TOKEN from .env) |
 | `src/echoguard/regression/extract_videomae.py` | VideoMAE embedding extraction |
 | `src/echoguard/regression/train.py` | Base MLP training loop |
 | `src/echoguard/regression/train_garden.py` | Model Garden training |
