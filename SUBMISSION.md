@@ -358,16 +358,16 @@ as a text token. Six experiments across three training paradigms were conducted:
 | GRPO v4 | RL + hard negatives | 800 steps | 17.32% | −1.64 | many | Catastrophic divergence |
 
 **Statistical root cause:** Cross-entropy loss over tokens computes
-$L = -\sum_t \log p(y_t | y_{<t})$, where each digit is an independent
+`L = −Σ_t log p(y_t | y_{<t})`, where each digit is an independent
 classification problem. The loss for predicting "60" vs "62" is identical to
 "60" vs "38" — there is no ordinal gradient signal. Additionally, EF is
 a **continuous scalar**, but VLM output is a **discrete token sequence**,
 creating an impedance mismatch between the task and the output space.
 
 **GRPO-specific failure:** In GRPO, the policy gradient is scaled by the
-**standardized reward** $(r - \mu_r) / \sigma_r$. When all K generations for a
-prompt produce identical tokens (mode collapse), $\sigma_r = 0$, yielding
-$0/0$ → zero gradient → no learning signal. This was observed in v1–v3 where
+**standardized reward** `(r − μ_r) / σ_r`. When all K generations for a
+prompt produce identical tokens (mode collapse), `σ_r = 0`, yielding
+`0/0` → zero gradient → no learning signal. This was observed in v1–v3 where
 the model collapsed to 3 unique EF values.
 
 **Phase 2 — Frozen Encoder + Regression (current approach):**
@@ -376,11 +376,14 @@ The key insight was to **decompose the task**: use MedGemma's learned visual
 representations as a feature backbone, but replace the token-generation head
 with a Huber-loss regression head that preserves ordinal relationships.
 
-$$L_\text{Huber}(\delta=5) = \begin{cases} \frac{1}{2}(y - \hat{y})^2 & \text{if } |y - \hat{y}| \leq \delta \\ \delta \cdot (|y - \hat{y}| - \frac{1}{2}\delta) & \text{otherwise} \end{cases}$$
+```
+L_Huber(δ=5) = ½(y − ŷ)²           if |y − ŷ| ≤ δ
+             = δ · (|y − ŷ| − ½δ)   otherwise
+```
 
 Huber loss is quadratic for small errors (EF off by < 5 points — provides
 strong gradient), and linear for large errors (robustness to outliers in the
-heavily-skewed dataset). The $\delta=5$ threshold was chosen because a 5-point
+heavily-skewed dataset). The δ=5 threshold was chosen because a 5-point
 EF error is at the boundary of clinical significance.
 
 #### Dataset Characteristics & Class Imbalance
@@ -458,23 +461,25 @@ discarding the inter-frame motion signal that is the primary discriminant.
 **Class imbalance mitigation (3 strategies):**
 
 1. **Inverse-frequency weighted sampling** — `WeightedRandomSampler` with weights
-   proportional to $1/n_{\text{class}}$, ensuring each batch sees roughly equal
+   proportional to `1/n_class`, ensuring each batch sees roughly equal
    representation of reduced, borderline, normal, and hyperdynamic cases. Normalized
    weights: reduced ≈ 0.35, normal ≈ 0.03 — the sampler draws reduced cases ~10×
    more often than normal.
 
 2. **Composite loss with clinical asymmetry:**
 
-$$L_\text{total} = L_\text{Huber}(\delta=5) + 0.1 \cdot L_\text{ordinal} + 0.05 \cdot L_\text{asymmetric} + 0.01 \cdot L_\text{range} + 0.2 \cdot L_\text{boundary}$$
+```
+L_total = L_Huber(δ=5) + 0.1·L_ordinal + 0.05·L_asymmetric + 0.01·L_range + 0.2·L_boundary
+```
 
-   - $L_\text{ordinal}$: Penalizes crossing EF category boundaries [45%, 55%, 70%]
+   - **L_ordinal**: Penalizes crossing EF category boundaries [45%, 55%, 70%]
      with margin=3.0. If the prediction lands on the wrong side of a boundary
      relative to ground truth, an additional penalty activates.
-   - $L_\text{asymmetric}$: **Missing reduced EF (false normal) is 3.5× worse than
+   - **L_asymmetric**: **Missing reduced EF (false normal) is 3.5× worse than
      calling normal as borderline.** A missed severely reduced EF could delay
      life-saving intervention. Missing hyperdynamic is penalized 2.0×.
-   - $L_\text{range}$: Soft penalty for predictions outside [0, 100] EF range.
-   - $L_\text{boundary}$: Pushes predictions toward extreme values when warranted
+   - **L_range**: Soft penalty for predictions outside [0, 100] EF range.
+   - **L_boundary**: Pushes predictions toward extreme values when warranted
      (reduced < 50%, hyper > 70%), combating the model's tendency to regress to the mean.
 
 3. **Gaussian embedding noise** (σ=0.01) during training: acts as data
@@ -485,7 +490,9 @@ $$L_\text{total} = L_\text{Huber}(\delta=5) + 0.1 \cdot L_\text{ordinal} + 0.05 
 
 Model selection uses a **composite score** rather than MAE alone:
 
-$$\text{score} = \text{MAE} - 5.0 \times \text{ClinAcc} - 3.0 \times \max(R^2, 0)$$
+```
+score = MAE − 5.0 × ClinAcc − 3.0 × max(R², 0)
+```
 
 This means 1 percentage point of clinical accuracy improvement is valued
 equivalent to 0.05% MAE reduction, and 0.10 R² improvement ≈ 0.30% MAE.
@@ -509,20 +516,20 @@ All 8 specialists converged within 19–50 epochs (well under the 100-epoch ceil
 
 | Metric | Definition | Why Used |
 |---|---|---|
-| **MAE** | $\frac{1}{n}\sum\|y - \hat{y}\|$ | Primary — directly interpretable as "average error in EF percentage points" |
-| **R²** | $1 - \frac{\text{SS}_\text{res}}{\text{SS}_\text{tot}}$ | Measures variance explained; critical because negative R² = worse than predicting the mean |
-| **RMSE** | $\sqrt{\frac{1}{n}\sum(y - \hat{y})^2}$ | Penalizes large errors more heavily than MAE |
-| **Within ±5%** | $\frac{1}{n}\sum\mathbb{1}[\|y-\hat{y}\| \leq 5]$ | Fraction of predictions within one clinically meaningful step |
-| **Within ±10%** | $\frac{1}{n}\sum\mathbb{1}[\|y-\hat{y}\| \leq 10]$ | Fraction within two clinical steps (broader tolerance) |
-| **Prediction diversity** | $\sigma(\hat{y})$ and count of unique values | Detects mode collapse — σ < 3.0 flags "possible collapse" |
+| **MAE** | (1/n) Σ\|y − ŷ\| | Primary — directly interpretable as "average error in EF percentage points" |
+| **R²** | 1 − SS_res / SS_tot | Measures variance explained; critical because negative R² = worse than predicting the mean |
+| **RMSE** | √((1/n) Σ(y − ŷ)²) | Penalizes large errors more heavily than MAE |
+| **Within ±5%** | Fraction where \|y − ŷ\| ≤ 5 | Fraction of predictions within one clinically meaningful step |
+| **Within ±10%** | Fraction where \|y − ŷ\| ≤ 10 | Fraction within two clinical steps (broader tolerance) |
+| **Prediction diversity** | σ(ŷ) and count of unique values | Detects mode collapse — σ < 3.0 flags "possible collapse" |
 
 **Clinical metrics (interpretive):**
 
 | Metric | Definition | Why Used |
 |---|---|---|
 | **Clinical Accuracy** | Fraction matching the correct EF category (age-adjusted) | The metric clinicians actually care about — is the patient normal, borderline, or reduced? |
-| **Abnormal Sensitivity** | $\frac{\text{TP}}{\text{TP} + \text{FN}}$ for non-normal EF | Critical safety metric — how many sick children does the system catch? |
-| **Abnormal Specificity** | $\frac{\text{TN}}{\text{TN} + \text{FP}}$ for non-normal EF | Avoids unnecessary referrals (false positives) |
+| **Abnormal Sensitivity** | TP / (TP + FN) for non-normal EF | Critical safety metric — how many sick children does the system catch? |
+| **Abnormal Specificity** | TN / (TN + FP) for non-normal EF | Avoids unnecessary referrals (false positives) |
 | **Per-category F1** | Harmonic mean of precision and recall per EF category | Handles class imbalance better than accuracy alone |
 | **Error by EF range** | MAE computed within EF bins (< 30%, 30–45%, 45–55%, 55–70%, > 70%) | Reveals if the model is accurate across the full pathology spectrum or only for normal hearts |
 
@@ -532,9 +539,11 @@ EF varies by age — a 50% EF is normal for a neonate but concerning for an
 adolescent. We compute age-adjusted Z-scores using a pediatric nomogram
 derived from 2,779 normal EchoNet-Pediatric patients (EF 55–73%):
 
-$$\mu_\text{EF}(\text{age, sex, BSA}) = 64.78 - 0.13 \times \text{age} + 0.37 \times \text{male} + 0.66 \times \text{BSA}$$
+```
+μ_EF(age, sex, BSA) = 64.78 − 0.13 × age + 0.37 × male + 0.66 × BSA
 
-$$Z = \frac{\text{EF} - \mu_\text{adjusted}}{\sigma}, \quad \sigma = 4.15\%$$
+Z = (EF − μ_adjusted) / σ,    σ = 4.15%
+```
 
 Z-score flags: **Critical** (Z ≤ −3.0), **Reduced** (−3.0 to −2.0),
 **Borderline** (−2.0 to −1.5), **Normal** (−1.5 to +1.5),
@@ -578,8 +587,8 @@ fitted on the training set:
 
 | View | Calibration Equation | IoU |
 |---|---|---|
-| A4C | $\text{EF}_\text{cal} = 0.378 \times \text{EF}_\text{area} + 46.66$ | 0.809 |
-| PSAX | $\text{EF}_\text{cal} = 0.752 \times \text{EF}_\text{area} + 20.66$ | 0.828 |
+| A4C | EF_calibrated = 0.378 × EF_area + 46.66 | 0.809 |
+| PSAX | EF_calibrated = 0.752 × EF_area + 20.66 | 0.828 |
 
 **Graduated ensemble blending (clinically motivated):**
 
@@ -613,17 +622,17 @@ learned patterns that can be biased by the 75% normal class prevalence.
 The confidence score combines two complementary signals via geometric mean:
 
 1. **Consistency score** (inter-specialist agreement):
-   $$\text{consistency} = \sigma\left(k \cdot (c - \sigma_\text{pred})\right), \quad k=0.30, \; c=3.0$$
+   `consistency = σ(k · (c − σ_pred))`, where k=0.30, c=3.0.
    When all 4 specialists agree (σ → 0), consistency → 0.95.
    When they disagree by σ > 8%, consistency drops below 0.30.
 
 2. **Z-score clarity** (distance from decision boundary):
-   $$\text{z\_conf} = \sigma\left(0.5 \cdot (|Z| - 1.5)\right)$$
+   `z_conf = σ(0.5 · (|Z| − 1.5))`.
    Extreme Z-scores (clearly abnormal or clearly normal) yield high confidence.
    Z near ±1.5 (borderline) yields low confidence.
 
 3. **Combined:**
-   $$\text{overall} = \text{clip}\left(\sqrt{\text{consistency} \times \text{z\_confidence}},\; 0.01,\; 0.99\right)$$
+   `overall = clip(√(consistency × z_confidence), 0.01, 0.99)`
 
 #### Dual-View Fusion: Conservative Consensus
 
@@ -632,10 +641,10 @@ When both A4C and PSAX are available, project_echo fuses conservatively:
 - **Primary view** = whichever predicts the **lower** (more pathological) EF.
   Clinical rationale: a cardiologist acts on the more concerning reading.
 - **Fused EF** = confidence-weighted average:
-  $$\text{EF}_\text{fused} = \frac{w_A \cdot \text{EF}_A + w_P \cdot \text{EF}_P}{w_A + w_P}$$
-  where $w = \text{confidence}_\text{overall}$ for each view.
+  `EF_fused = (w_A · EF_A + w_P · EF_P) / (w_A + w_P)`,
+  where w = overall confidence for each view.
 - **Cross-view disagreement** (|ΔEF| > 10%) triggers a confidence penalty:
-  $$w_\text{penalty} = 1 - 0.4 \times \min\left(\frac{|\Delta\text{EF}|}{30}, 1\right)$$
+  `w_penalty = 1 − 0.4 × min(|ΔEF| / 30, 1)`
   Up to −40% confidence reduction at |ΔEF| = 30%, flagging cases that need
   human review.
 
