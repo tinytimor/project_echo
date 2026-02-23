@@ -35,7 +35,7 @@ the area change between end-diastole (max filling) and end-systole (max contract
 
 ### A4C View — Apical Four-Chamber
 
-https://github.com/tinytimor/project_echo/raw/main/figures/a4c_segmentation.mp4
+![A4C LV Segmentation — Normal vs Reduced](figures/a4c_segmentation.gif)
 
 *Real-time LV segmentation on the A4C view. **Top:** Normal cardiac function
 (EF ≈ 65%) — the ventricle contracts vigorously from ED to ES. **Bottom:**
@@ -44,7 +44,7 @@ barely squeezes. Green overlay = AI-detected LV boundary.*
 
 ### PSAX View — Parasternal Short-Axis
 
-https://github.com/tinytimor/project_echo/raw/main/figures/psax_segmentation.mp4
+![PSAX LV Segmentation — Normal vs Reduced](figures/psax_segmentation.gif)
 
 *Cross-sectional "donut" view. The AI segments the circular LV cross-section
 and tracks area change across the cardiac cycle. PSAX achieves our best
