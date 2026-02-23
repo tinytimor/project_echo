@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echoguard-peds"
+version = "0.1.0"
+description = "AI-Assisted Pediatric Cardiac Function Assessment with MedGemma"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "transformers>=4.50.0",
+    "accelerate",
+    "opencv-python",
+    "pillow",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "matplotlib",
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["echoguard*"]
