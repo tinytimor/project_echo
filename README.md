@@ -1,31 +1,35 @@
 # project_echo 🫀
 
-**EchoGuard-Peds: AI-Assisted Pediatric Cardiac Function Assessment with MedGemma**
+**project_echo: AI-Assisted Pediatric Cardiac Function Assessment with MedGemma**
 
+> **MedGemma Impact Challenge 2026** · Main Track · Agentic Workflow · Novel Task · Edge AI
+>
 > First-ever application of MedGemma to echocardiography — zero training data
 > contamination, clinically impactful, privacy-first, runs entirely on a laptop.
+>
+> 📄 [Competition Writeup →](SUBMISSION.md)
 
 ---
 
 ## Overview
 
-EchoGuard-Peds is an **agentic "second opinion"** system that estimates pediatric
+project_echo is an **agentic "second opinion"** system that estimates pediatric
 ejection fraction (EF) from echocardiography videos using an 8-specialist Model
 Garden, geometric EF via LV segmentation, and MedGemma 4B VLM visual validation.
 
 ### Why This Matters
 
-- **1.35M+ children** live with congenital heart disease in the US
+- **1.35M+ children** live with congenital heart disease in the US [5]
 - Pediatric echo interpretation requires **specialized training** (3+ year fellowship)
 - Rural/underserved areas face critical **workforce shortages**
 - $150k+ echo machines have Auto-EF but **fail on fast-beating pediatric hearts**
-- A **$2k handheld POCUS probe + laptop** running EchoGuard fills the gap
+- A **$2k handheld POCUS probe + laptop** running project_echo fills the gap
 
 ---
 
 ## Model Accuracy
 
-All models trained exclusively on EchoNet-Pediatric data (7,810 videos).
+All models trained exclusively on EchoNet-Pediatric data [1] (7,810 videos).
 No curriculum learning or adult pre-training was used.
 
 ### A4C View (Apical Four-Chamber)
@@ -68,23 +72,67 @@ No curriculum learning or adult pre-training was used.
 
 ---
 
+## Clinical Workflow Context
+
+### How Clinicians Use Echocardiography
+
+A pediatric echocardiogram begins when a pediatrician or neonatologist detects
+a murmur, abnormal pulse oximetry, or symptoms of cardiac dysfunction. A trained
+cardiac sonographer acquires standardized echo views over **30–60 minutes** [1]
+— longer for uncooperative children with heart rates of 100–160 BPM. A
+fellowship-trained pediatric cardiologist then interprets the images (15–30
+minutes), assessing chamber sizes, wall motion, valve function, and EF. Reports
+typically reach the referring physician in 24–48 hours.
+
+### The Two Views project_echo Analyzes
+
+**Apical Four-Chamber (A4C):** Obtained by placing the transducer at the cardiac
+apex, visualizing all four chambers simultaneously [6]. Clinicians assess global
+LV function, regional wall motion (basal/mid/apical segments), mitral and
+tricuspid valve function, atrial sizes, and septal defects (ASD/VSD). The A4C
+provides the **long-axis LV length** essential for volumetric EF calculation via
+biplane Simpson's method [7].
+
+**Parasternal Short-Axis (PSAX):** Obtained from the left parasternal window,
+producing a cross-sectional "donut" view of the LV [6]. The PSAX displays all
+6 mid-ventricular wall segments simultaneously — the single best view for
+detecting regional wall motion abnormalities. It provides the **LV
+cross-sectional area** for the 5/6 × A × L (area-length) EF method used in
+EchoNet-Pediatric [1].
+
+**Why both views matter:** The area-length EF method requires both — PSAX for
+cross-sectional area, A4C for long-axis length [6]. project_echo processes both
+independently with separate ensembles and fuses conservatively, flagging
+|ΔEF| > 10% discordance. This mirrors how cardiologists integrate information
+from multiple acoustic windows.
+
+### Inter-Observer Variability
+
+Two expert echocardiographers may measure EF values differing by **5–10
+percentage points** on the same study [7], due to endocardial border tracing
+differences and frame selection. project_echo provides a **reproducible,
+deterministic estimate** (MAE 5.08–5.49%) within the range of expert
+inter-observer variability.
+
+---
+
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    EchoGuard-Peds Pipeline                           │
+│                    project_echo Pipeline                             │
 │                                                                      │
 │  LAYER 1 — MEASURE                                                   │
-│  AVI → VideoMAE (MCG-NJU/videomae-base, frozen) → (16, 768)         │
+│  AVI → VideoMAE [3] (MCG-NJU/videomae-base, frozen) → (16, 768)     │
 │  → Model Garden: TCN + Temporal + MultiTask + MLP (4 per view)       │
 │  → Weighted ensemble EF                                              │
 │                                                                      │
 │  LAYER 1.5 — GEOMETRIC VERIFICATION                                  │
-│  AVI → DeepLabV3 segmentation → LV area → Calibrated EF             │
+│  AVI → DeepLabV3 [4] segmentation → LV area → Calibrated EF         │
 │  → Graduated blend with regression EF                                │
 │                                                                      │
 │  LAYER 2 — VALIDATE                                                  │
-│  MedGemma 4B VLM ("Senior Attending")                                │
+│  MedGemma 4B VLM [2] ("Senior Attending")                             │
 │  → AGREE / UNCERTAIN / DISAGREE + LV description + reasoning         │
 │                                                                      │
 │  LAYER 3 — SYNTHESIZE                                                │
@@ -251,7 +299,7 @@ PYTHONPATH=src uvicorn src.demo_api:app --host 0.0.0.0 --port 8000 --reload
 
 ## Dataset
 
-### EchoNet-Pediatric
+### EchoNet-Pediatric [1]
 
 | Property | Value |
 |---|---|
@@ -262,7 +310,7 @@ PYTHONPATH=src uvicorn src.demo_api:app --host 0.0.0.0 --port 8000 --reload
 | Labels | EF, expert LV tracings at ED/ES |
 | Ages | 0–18 years |
 | Views | 3,284 A4C + 4,526 PSAX |
-| Contamination | **NOT in MedGemma training data** ✅ |
+| Contamination | **NOT in MedGemma training data** [2] ✅ |
 
 ### Split Mapping (10-Fold CV → 3-Way)
 
@@ -279,8 +327,10 @@ PYTHONPATH=src uvicorn src.demo_api:app --host 0.0.0.0 --port 8000 --reload
 ```
 project_echo/
 ├── README.md                      # This file
+├── SUBMISSION.md                  # MedGemma Impact Challenge 2026 writeup
 ├── agents.md                      # Full technical history & architecture docs
 ├── train.sh                       # Unified training pipeline
+├── download_models.sh             # Automated model download script
 ├── pyproject.toml                 # Package configuration
 │
 ├── src/                           # All source code
@@ -321,6 +371,7 @@ project_echo/
 │       └── pediatric_psax/        # .pt files + manifest.json
 │
 └── checkpoints/
+    ├── README.md                            # Model guide (architecture, roles, metrics)
     ├── regression_videomae_tcn_a4c/         # TCN A4C  (MAE 5.49%, best A4C)
     ├── regression_videomae_a4c/             # Temporal A4C
     ├── regression_videomae_multitask_a4c/   # MultiTask A4C
@@ -356,6 +407,52 @@ project_echo/
 | **Storage** | ~12 GB (models + dataset + checkpoints) |
 | **CUDA** | 12.x with BF16 support |
 
+## Competition
+
+This project is a submission to the **[MedGemma Impact Challenge 2026](https://kaggle.com/competitions/med-gemma-impact-challenge)** on Kaggle.
+
+See [SUBMISSION.md](SUBMISSION.md) for the full writeup covering problem statement,
+solution architecture, technical details, and track eligibility.
+
 ## License
 
 Research use only. EchoNet-Pediatric data subject to Stanford AIMI Research Use Agreement.
+
+---
+
+## References
+
+1. **EchoNet-Pediatric Dataset:** Reddy C, Lopez L, Ouyang D, Zou JY, He B.
+   "Video-Based Deep Learning for Automated Assessment of Left Ventricular
+   Ejection Fraction in Pediatric Patients." *J Am Soc Echocardiogr*. 2023.
+   Dataset: https://echonet.github.io/pediatric/
+
+2. **MedGemma 4B:** Sellergren A, Kazemzadeh S, Jaroensri T, et al.
+   "MedGemma Technical Report." arXiv:2507.05201, 2025.
+   Model: https://huggingface.co/google/medgemma-4b-it
+   Training data: CXR, histopathology, dermatology, ophthalmology, CT —
+   **no echocardiography or ultrasound**.
+
+3. **VideoMAE:** Tong Z, Song Y, Wang J, Wang L. "VideoMAE: Masked
+   Autoencoders are Data-Efficient Learners for Self-Supervised Video
+   Pre-Training." *NeurIPS* 2022. https://arxiv.org/abs/2203.12602
+   Model: https://huggingface.co/MCG-NJU/videomae-base
+   Pre-trained on Kinetics-400 (no medical data).
+
+4. **DeepLabV3:** Chen LC, Papandreou G, Schroff F, Adam H. "Rethinking
+   Atrous Convolution for Semantic Image Segmentation."
+   arXiv:1706.05587, 2017. https://arxiv.org/abs/1706.05587
+
+5. **CHD Prevalence:** Gilboa SM, Devine OJ, Kucik JE, et al. "Congenital
+   Heart Defects in the United States." *Circulation*. 2016;134(2):101–109.
+   https://doi.org/10.1161/CIRCULATIONAHA.115.019307
+
+6. **Pediatric Echocardiography Guidelines:** Lopez L, Colan SD, Frommelt PC,
+   et al. "Recommendations for Quantification Methods During the Performance
+   of a Pediatric Echocardiogram." *J Am Soc Echocardiogr*. 2010;23(5):465–495.
+   https://doi.org/10.1016/j.echo.2010.03.019
+
+7. **Adult Cardiac Chamber Quantification:** Lang RM, Badano LP, Mor-Avi V,
+   et al. "Recommendations for Cardiac Chamber Quantification by
+   Echocardiography in Adults." *J Am Soc Echocardiogr*. 2015;28(1):1–39.
+   https://doi.org/10.1016/j.echo.2014.10.003

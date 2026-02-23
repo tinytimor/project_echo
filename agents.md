@@ -1,4 +1,4 @@
-# EchoGuard-Peds: AI-Assisted Pediatric Cardiac Function Assessment
+# project_echo: AI-Assisted Pediatric Cardiac Function Assessment
 
 > **Version:** 3.0 | **Date:** 2026-02-23
 > **Challenge:** MedGemma Impact Challenge 2026
@@ -14,7 +14,7 @@ our system estimates how strongly the heart pumps (ejection fraction) using an
 "Senior Attending" critic, and provides geometric EF via LV segmentation —
 all in a privacy-first architecture that runs entirely on a laptop.
 
-**For clinicians:** EchoGuard-Peds is an agentic "second opinion" — a $2k
+**For clinicians:** project_echo is an agentic "second opinion" — a $2k
 handheld probe + laptop replaces the $150k echo machine for pediatric EF triage,
 with age-adjusted Z-scores and natural language reasoning.
 
@@ -76,7 +76,7 @@ Huber loss knows 60% vs 62% is better than 60% vs 38%. Cross-entropy does not.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                 EchoGuard-Peds: Agentic Pipeline                       │
+│                 project_echo: Agentic Pipeline                         │
 │                                                                         │
 │  LAYER 1 — MEASURE                                                      │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
@@ -340,9 +340,163 @@ data/echonet_pediatric/
 - Pediatric echo interpretation requires 3+ year fellowship training
 - Rural/underserved areas face critical pediatric cardiologist shortages
 - $150k+ echo machines have Auto-EF but fail on fast-beating pediatric hearts
-- A $2k handheld POCUS probe + laptop running EchoGuard fills the gap
+- A $2k handheld POCUS probe + laptop running project_echo fills the gap
 
-### 6.2 Pediatric EF Norms (Age-Adjusted)
+### 6.2 Clinical Workflow: How Clinicians Use Echocardiography
+
+#### 6.2.1 The Patient Journey
+
+A pediatric echocardiogram typically begins with a referral from a pediatrician
+or neonatologist who detects a murmur, abnormal pulse oximetry, or symptoms
+suggestive of cardiac dysfunction (poor feeding, cyanosis, exercise intolerance).
+The clinical workflow proceeds as follows:
+
+1. **Referral & Scheduling** — The referring physician orders a transthoracic
+   echocardiogram (TTE). Wait times range from days (outpatient) to immediate
+   (inpatient/emergent). In underserved areas, families may travel hours to the
+   nearest pediatric cardiology center.
+
+2. **Image Acquisition** (30–60 minutes) — A trained cardiac sonographer
+   acquires standardized echo views using a phased-array transducer placed
+   on the chest wall. Pediatric studies take longer than adult studies because
+   children are often uncooperative, heart rates are faster (100–160 BPM in
+   infants [6]), and smaller cardiac structures demand higher spatial
+   resolution [9]. The sonographer captures 2D B-mode video loops, M-mode
+   tracings, and Doppler flow measurements from multiple acoustic windows.
+
+3. **Interpretation** (15–30 minutes) — A pediatric cardiologist (or fellow
+   under attending supervision) reviews the acquired images on a PACS
+   workstation. They assess chamber sizes, wall motion, valve function, and
+   calculate ejection fraction. This step requires the 3+ year pediatric
+   cardiology fellowship [7].
+
+4. **Reporting & Communication** (24–48 hours typical turnaround) — The
+   cardiologist dictates a structured report with measurements, diagnoses,
+   and recommendations. Urgent findings are communicated immediately by phone.
+
+5. **Follow-up** — Depending on findings, patients may return for serial
+   echos (weeks to months) to monitor disease progression or treatment response.
+
+#### 6.2.2 The A4C View (Apical Four-Chamber)
+
+The **Apical Four-Chamber (A4C)** view is obtained by placing the transducer
+at the cardiac apex (left lateral chest wall, near the nipple line) with the
+beam directed superiorly toward the right shoulder [10]. This window
+simultaneously visualizes all four cardiac chambers and both atrioventricular
+valves in a single plane, making it the most information-dense standard view
+in echocardiography.
+
+**What clinicians assess in the A4C view:**
+
+- **Left ventricular (LV) size and function** — The A4C provides the long-axis
+  view of the LV, essential for biplane Simpson's method of discs, the ASE/EACVI
+  recommended technique for EF measurement in adults [11] and the basis of
+  pediatric EF quantification guidelines [10]. The endocardial border is traced
+  at end-diastole (ED, maximum filling) and end-systole (ES, maximum contraction)
+  to calculate EDV, ESV, and EF = (EDV − ESV) / EDV.
+
+- **Regional wall motion** — The A4C displays the basal, mid, and apical
+  segments of the LV septum and lateral wall. Reduced or absent wall thickening
+  in specific segments indicates ischemia or prior infarction.
+
+- **Mitral and tricuspid valve function** — Regurgitation, stenosis, and
+  leaflet morphology are assessed with 2D and color Doppler.
+
+- **Right ventricular size and function** — RV dilation or dysfunction may
+  indicate pulmonary hypertension or congenital anomalies.
+
+- **Atrial sizes** — Left atrial enlargement suggests chronic volume overload
+  (e.g., significant mitral regurgitation or left-to-right shunts).
+
+- **Septal defects** — Atrial septal defects (ASD) and ventricular septal
+  defects (VSD) are directly visualized with 2D and color Doppler.
+
+**Why A4C is critical for project_echo:** The A4C provides the primary
+long-axis LV geometry needed for volumetric EF estimation. Our TCN model
+achieves MAE 5.49% on A4C because the view captures global LV contractile
+function — the temporal pattern of endocardial inward motion from ED to ES
+is the fundamental signal for EF.
+
+#### 6.2.3 The PSAX View (Parasternal Short-Axis)
+
+The **Parasternal Short-Axis (PSAX)** view is obtained from the left parasternal
+window (2nd–4th intercostal space) with the transducer rotated 90° clockwise
+from the parasternal long-axis position [10]. This produces a cross-sectional
+"donut" view of the LV, cutting perpendicular to its long axis.
+
+**What clinicians assess in the PSAX view:**
+
+- **Regional wall motion analysis** — The PSAX at the papillary muscle level
+  displays all 6 mid-ventricular wall segments simultaneously (anterior,
+  anterolateral, inferolateral, inferior, inferoseptal, anteroseptal). This
+  is the single best view for detecting regional wall motion abnormalities
+  because all coronary artery territories are represented in one image.
+
+- **LV cross-sectional area** — The short-axis view provides the
+  cross-sectional area needed for the area-length (5/6 × A × L) method of
+  EF calculation [1], which is the method used in the EchoNet-Pediatric
+  dataset. At ED and ES, the endocardial border is traced to measure
+  the LV cavity area, and combined with the long-axis length from the A4C,
+  LV volumes are estimated.
+
+- **Ventricular geometry** — A normal LV appears circular in PSAX. Deviation
+  toward D-shaped geometry indicates RV pressure or volume overload (septal
+  flattening). This is particularly important in pediatric patients with
+  congenital heart disease.
+
+- **Papillary muscle morphology** — Papillary muscle abnormalities can
+  indicate hypertrophic cardiomyopathy (HCM) or mitral valve dysfunction.
+
+- **Valve-level assessment** — At the aortic valve level, PSAX shows the
+  aortic valve cusps, interatrial septum, tricuspid and pulmonary valves,
+  enabling assessment of bicuspid aortic valve and proximal coronary arteries.
+
+**Why PSAX is critical for project_echo:** The PSAX provides cross-sectional
+LV geometry complementary to the A4C long-axis view. Our Temporal Transformer
+achieves the best overall performance (MAE 5.08%) on PSAX because the
+concentric contraction pattern — the "donut" squeezing symmetrically — is
+a strong temporal signal for EF. The geometric EF pipeline (DeepLabV3
+segmentation) also achieves its best IoU (0.828) on PSAX because the
+near-circular LV cross-section is easier to segment than the complex
+A4C geometry.
+
+#### 6.2.4 Why Both Views Are Needed
+
+The EchoNet-Pediatric dataset uses the **biplane area-length (5/6 × A × L)**
+method [1] to compute ground-truth EF, which inherently requires both views:
+the PSAX provides the cross-sectional area (A) and the A4C provides the
+long-axis length (L). This dual-view requirement is standard in pediatric
+echocardiographic guidelines [10].
+
+Clinically, A4C and PSAX are complementary:
+- **A4C** excels at global LV function, valve assessment, and septal defects
+- **PSAX** excels at regional wall motion and ventricular geometry
+- **Together** they provide the geometric data for volumetric EF estimation
+- **Discordance** between views (our dual-view fusion flags |ΔEF| > 10%)
+  often indicates a technical limitation (foreshortening, off-axis imaging)
+  or true pathology (regional dysfunction visible in one view but not the other)
+
+This is why project_echo's architecture processes both views independently
+with separate specialist ensembles, then fuses conservatively — mirroring
+how a cardiologist integrates information from multiple acoustic windows.
+
+#### 6.2.5 Inter-Observer Variability: The Case for AI Assistance
+
+A well-documented challenge in echocardiography is **inter-observer
+variability** — two expert readers may measure EF values that differ by
+5–10 percentage points on the same study [11]. Sources of variability
+include endocardial border tracing differences, frame selection for ED/ES,
+and geometric assumptions. In pediatric patients, this variability is
+often worse due to faster heart rates, smaller structures, and less
+cooperative patients.
+
+project_echo addresses this by providing a **reproducible, deterministic
+EF estimate** that serves as a calibrated second opinion. The system's
+MAE of 5.08–5.49% is within the range of inter-observer variability
+reported in expert-vs-expert comparisons, making it a clinically meaningful
+benchmark for automated assessment.
+
+### 6.3 Pediatric EF Norms (Age-Adjusted)
 
 | Age Group | Normal EF | Borderline | Reduced |
 |---|---|---|---|
@@ -377,6 +531,15 @@ correctly regardless of working directory.
 | `src/echoguard/regression/model_garden.py` | TCN, Temporal, MultiTask architectures |
 | `src/echoguard/regression/infer.py` | Inference wrapper |
 | `src/echoguard/regression/geometric_ef.py` | DeepLabV3 segmentation + geometric EF |
+
+### Competition Submission
+
+| File | Purpose |
+|---|---|
+| `SUBMISSION.md` | MedGemma Impact Challenge 2026 writeup (Kaggle template) |
+| `checkpoints/README.md` | Model guide — architecture, roles, metrics for each checkpoint |
+| `data/README.md` | EchoNet-Pediatric download instructions |
+| `local_models/README.md` | Model download guide (MedGemma, VideoMAE, DeepLabV3) |
 
 ### Training
 
@@ -452,3 +615,82 @@ correctly regardless of working directory.
 - **`src/` layout with PROJECT_ROOT:** All source code lives under `src/`.
   A `PROJECT_ROOT` constant in `config.py` (computed from `__file__`) ensures
   all checkpoint/data/model paths resolve correctly regardless of CWD.
+
+---
+
+## 10. References
+
+### Dataset
+
+1. **EchoNet-Pediatric:** Reddy C, Lopez L, Ouyang D, Zou JY, He B.
+   "Video-Based Deep Learning for Automated Assessment of Left Ventricular
+   Ejection Fraction in Pediatric Patients." *Journal of the American Society
+   of Echocardiography*. 2023.
+   - Dataset page: https://echonet.github.io/pediatric/
+   - Download: https://stanfordaimi.azurewebsites.net/
+   - License: Stanford Research Use Agreement (non-commercial)
+
+### Models
+
+2. **MedGemma 4B IT** (VLM critic — Layer 2): Sellergren A, Kazemzadeh S,
+   Jaroensri T, et al. "MedGemma Technical Report." arXiv:2507.05201, 2025.
+   - Model card: https://huggingface.co/google/medgemma-4b-it
+   - Paper: https://arxiv.org/abs/2507.05201
+   - Training data: CXR (MIMIC-CXR), histopathology (TCGA, CAMELYON),
+     dermatology (PAD-UFES-20, SCIN), ophthalmology (EyePACS), CT, knee X-rays.
+     **No echocardiography, no ultrasound, no Stanford AIMI pediatric data.**
+
+3. **VideoMAE** (video encoder — Layer 1): Tong Z, Song Y, Wang J, Wang L.
+   "VideoMAE: Masked Autoencoders are Data-Efficient Learners for
+   Self-Supervised Video Pre-Training." *NeurIPS* 2022.
+   - Paper: https://arxiv.org/abs/2203.12602
+   - Model: https://huggingface.co/MCG-NJU/videomae-base
+   - Pre-trained on Kinetics-400 (human action recognition videos — no
+     medical data). 86M parameters, frozen during our training.
+
+4. **DeepLabV3** (LV segmentation — Layer 1.5): Chen LC, Papandreou G,
+   Schroff F, Adam H. "Rethinking Atrous Convolution for Semantic Image
+   Segmentation." arXiv:1706.05587, 2017.
+   - Paper: https://arxiv.org/abs/1706.05587
+   - We use DeepLabV3-MobileNetV3 backbone trained on expert LV contours
+     from EchoNet-Pediatric VolumeTracings.csv.
+
+### Clinical References
+
+5. **CHD Prevalence (1.35M children):** Gilboa SM, Devine OJ, Kucik JE,
+   et al. "Congenital Heart Defects in the United States: Estimating the
+   Magnitude of the Affected Population in 2010." *Circulation*.
+   2016;134(2):101–109.
+   https://doi.org/10.1161/CIRCULATIONAHA.115.019307
+
+6. **Pediatric Heart Rate Norms:** Fleming S, Thompson M, Stevens R, et al.
+   "Normal ranges of heart rate and respiratory rate in children from birth
+   to 18 years of age." *Lancet*. 2011;377(9770):1011–1018.
+   https://doi.org/10.1016/S0140-6736(10)62226-X
+
+7. **Pediatric Cardiology Fellowship:** ACGME Program Requirements for
+   Graduate Medical Education in Pediatric Cardiology.
+   https://www.acgme.org/specialties/pediatric-cardiology/
+
+8. **HRSA Health Centers:** HRSA Bureau of Primary Health Care, "About the
+   Health Center Program," 2024. ~1,400 funded centers, 16,200+ sites.
+   https://bphc.hrsa.gov/about-health-centers
+
+9. **POCUS Probe Pricing (~$2,000):** Butterfly Network, Inc. Butterfly iQ3
+   handheld ultrasound device. List price approximately $2,000–$3,000.
+   https://www.butterflynetwork.com/
+
+10. **Pediatric Echocardiography Quantification Guidelines:** Lopez L,
+    Colan SD, Frommelt PC, et al. "Recommendations for Quantification
+    Methods During the Performance of a Pediatric Echocardiogram: A Report
+    from the Pediatric Measurements Writing Group of the American Society
+    of Echocardiography Pediatric and Congenital Heart Disease Council."
+    *J Am Soc Echocardiogr*. 2010;23(5):465–495.
+    https://doi.org/10.1016/j.echo.2010.03.019
+
+11. **Adult Cardiac Chamber Quantification Guidelines:** Lang RM, Badano LP,
+    Mor-Avi V, et al. "Recommendations for Cardiac Chamber Quantification
+    by Echocardiography in Adults: An Update from the American Society of
+    Echocardiography and the European Association of Cardiovascular Imaging."
+    *J Am Soc Echocardiogr*. 2015;28(1):1–39.
+    https://doi.org/10.1016/j.echo.2014.10.003
