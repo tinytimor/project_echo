@@ -226,6 +226,335 @@ research use agreement.
 
 ---
 
+### Experimental Design & Methodology
+
+#### Why This Approach? The Failure Taxonomy That Drove Our Architecture
+
+The experimental design of project_echo was shaped by **systematic failure analysis**.
+We did not begin with a regression pipeline — we began with the simplest possible
+approach (zero-shot VLM) and progressively pivoted as each method revealed its
+limitations. This section documents the experimental progression, the statistical
+rationale behind each design decision, and the quantitative/qualitative metrics
+used for evaluation.
+
+**Phase 1 — Direct VLM Prediction (6 experiments, all failed):**
+
+We first hypothesized that MedGemma's medical vision encoders, combined with
+LoRA fine-tuning or GRPO reinforcement learning, could learn to predict EF
+as a text token. Six experiments across three training paradigms were conducted:
+
+| Experiment | Training | Epochs | MAE | R² | Unique Predictions | Failure Mode |
+|---|---|---|---|---|---|---|
+| Zero-shot 4B | None | — | 9.33% | −0.22 | many | No echo understanding |
+| LoRA SFT v1 | 10K samples | 3 | 7.33% | −0.17 | many | Clustered at population mean |
+| LoRA SFT v2 | 10K samples | 5 | 10.46% | −0.40 | 5 | Mode collapse |
+| GRPO v1 | RL reward | 500 steps | 6.95% | neg | 3 | Reward hacking |
+| GRPO v3 | RL + diversity | 1000 steps | 7.12% | neg | 3 | Identical generations → σ(r)=0 → zero gradient |
+| GRPO v4 | RL + hard negatives | 800 steps | 17.32% | −1.64 | many | Catastrophic divergence |
+
+**Statistical root cause:** Cross-entropy loss over tokens computes
+$L = -\sum_t \log p(y_t | y_{<t})$, where each digit is an independent
+classification problem. The loss for predicting "60" vs "62" is identical to
+"60" vs "38" — there is no ordinal gradient signal. Additionally, EF is
+a **continuous scalar**, but VLM output is a **discrete token sequence**,
+creating an impedance mismatch between the task and the output space.
+
+**GRPO-specific failure:** In GRPO, the policy gradient is scaled by the
+**standardized reward** $(r - \mu_r) / \sigma_r$. When all K generations for a
+prompt produce identical tokens (mode collapse), $\sigma_r = 0$, yielding
+$0/0$ → zero gradient → no learning signal. This was observed in v1–v3 where
+the model collapsed to 3 unique EF values.
+
+**Phase 2 — Frozen Encoder + Regression (current approach):**
+
+The key insight was to **decompose the task**: use MedGemma's learned visual
+representations as a feature backbone, but replace the token-generation head
+with a Huber-loss regression head that preserves ordinal relationships.
+
+$$L_\text{Huber}(\delta=5) = \begin{cases} \frac{1}{2}(y - \hat{y})^2 & \text{if } |y - \hat{y}| \leq \delta \\ \delta \cdot (|y - \hat{y}| - \frac{1}{2}\delta) & \text{otherwise} \end{cases}$$
+
+Huber loss is quadratic for small errors (EF off by < 5 points — provides
+strong gradient), and linear for large errors (robustness to outliers in the
+heavily-skewed dataset). The $\delta=5$ threshold was chosen because a 5-point
+EF error is at the boundary of clinical significance.
+
+#### Dataset Characteristics & Class Imbalance
+
+**EchoNet-Pediatric** [6] was selected because (a) it has verified ground-truth
+EF from expert LV tracings, (b) MedGemma was never trained on it, and
+(c) it is the largest labeled pediatric echo dataset available.
+
+| Property | A4C | PSAX |
+|---|---|---|
+| Total videos | 3,284 | 4,526 |
+| Train (folds 0–7) | 2,580 | 3,559 |
+| Validation (fold 8) | 336 | 448 |
+| Test (fold 9) | 368 | 519 |
+| EF range | 7.0–73.0% | 4.1–73.0% |
+| EF mean ± σ | 60.9 ± 10.5% | 61.3 ± 10.1% |
+| Age range | 0–18 years | 0–18 years |
+| Sex ratio (M/F) | 1,879/1,392 | 2,587/1,928 |
+
+**Severe class imbalance** (a 10:1 ratio) is the defining challenge:
+
+| EF Category | A4C Train | PSAX Train | Imbalance vs Normal |
+|---|---|---|---|
+| **Reduced** (< 45%) | 197 (7.6%) | 244 (6.9%) | ~10:1 |
+| **Borderline** (45–55%) | 182 (7.1%) | 233 (6.5%) | ~11:1 |
+| **Normal** (55–70%) | 1,943 (75.3%) | 2,733 (76.8%) | majority |
+| **Hyperdynamic** (> 70%) | 258 (10.0%) | 349 (9.8%) | ~8:1 |
+
+This imbalance is why VLM text generation collapsed to the population mean —
+predicting "60%" for everything achieves MAE ~6% but R² = 0. Our mitigation
+strategies are described in the training methodology below.
+
+#### Feature Extraction: VideoMAE Embeddings
+
+**Why VideoMAE over SigLIP (MedGemma's native encoder):**
+
+| Feature | VideoMAE [7] | SigLIP (MedGemma) |
+|---|---|---|
+| Temporal awareness | ✅ Tube masking pre-training captures motion | ❌ Per-frame encoding, no temporal modeling |
+| Pre-training data | Kinetics-400 (human action recognition) | Medical images (CXR, derm, path) |
+| Input format | 16-frame video clip | Single image |
+| Embedding dim | 768 | 768 |
+| Domain relevance | Actions = temporal patterns = cardiac motion | Medical anatomy (no motion) |
+
+VideoMAE was chosen because EF estimation is fundamentally a **temporal task** —
+measuring how the LV contracts over a cardiac cycle. VideoMAE's tube-masking
+pre-training learns spatiotemporal representations from video, capturing exactly
+the kind of motion patterns that define EF. SigLIP processes frames independently,
+discarding the inter-frame motion signal that is the primary discriminant.
+
+**Extraction procedure:**
+1. Load AVI video → extract all frames
+2. Use expert tracing annotations (VolumeTracings.csv) to identify ED and ES frames
+3. Uniformly sample 16 frames spanning the cardiac cycle (ED → ES → next ED)
+4. Resize to 224×224, normalize with ImageNet statistics
+5. Forward through frozen VideoMAE encoder (MCG-NJU/videomae-base, 86M params)
+6. Spatially mean-pool patch tokens → 8 temporal positions × 768 dimensions
+7. Save as `.pt` file per video (pre-computed for training efficiency)
+
+#### Training Methodology
+
+**Optimizer and schedule:**
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Optimizer | AdamW | Weight decay regularization for small models |
+| Learning rate | 1e-3 | Aggressive for small heads (< 22M params) |
+| Weight decay | 1e-4 | Standard L2 regularization |
+| Batch size | 64 | Full utilization of GPU memory |
+| Max epochs | 100 | Generous ceiling; early stopping triggers earlier |
+| Warmup | 5 epochs | Linear warmup to avoid early instability |
+| Scheduler | Cosine annealing | Smooth LR decay; avoids plateau issues |
+| Gradient clipping | Max norm 1.0 | Prevents exploding gradients with small models |
+
+**Class imbalance mitigation (3 strategies):**
+
+1. **Inverse-frequency weighted sampling** — `WeightedRandomSampler` with weights
+   proportional to $1/n_{\text{class}}$, ensuring each batch sees roughly equal
+   representation of reduced, borderline, normal, and hyperdynamic cases. Normalized
+   weights: reduced ≈ 0.35, normal ≈ 0.03 — the sampler draws reduced cases ~10×
+   more often than normal.
+
+2. **Composite loss with clinical asymmetry:**
+
+$$L_\text{total} = L_\text{Huber}(\delta=5) + 0.1 \cdot L_\text{ordinal} + 0.05 \cdot L_\text{asymmetric} + 0.01 \cdot L_\text{range} + 0.2 \cdot L_\text{boundary}$$
+
+   - $L_\text{ordinal}$: Penalizes crossing EF category boundaries [45%, 55%, 70%]
+     with margin=3.0. If the prediction lands on the wrong side of a boundary
+     relative to ground truth, an additional penalty activates.
+   - $L_\text{asymmetric}$: **Missing reduced EF (false normal) is 3.5× worse than
+     calling normal as borderline.** A missed severely reduced EF could delay
+     life-saving intervention. Missing hyperdynamic is penalized 2.0×.
+   - $L_\text{range}$: Soft penalty for predictions outside [0, 100] EF range.
+   - $L_\text{boundary}$: Pushes predictions toward extreme values when warranted
+     (reduced < 50%, hyper > 70%), combating the model's tendency to regress to the mean.
+
+3. **Gaussian embedding noise** (σ=0.01) during training: acts as data
+   augmentation in the embedding space, improving generalization with no
+   additional data required.
+
+**Model selection criterion (early stopping):**
+
+Model selection uses a **composite score** rather than MAE alone:
+
+$$\text{score} = \text{MAE} - 5.0 \times \text{ClinAcc} - 3.0 \times \max(R^2, 0)$$
+
+This means 1 percentage point of clinical accuracy improvement is valued
+equivalent to 0.05% MAE reduction, and 0.10 R² improvement ≈ 0.30% MAE.
+The best model minimizes this score, balancing regression precision with
+clinical classification accuracy. Early stopping patience = 15 epochs.
+
+**Training convergence (TCN A4C, representative):**
+
+| Metric | Epoch 1 | Epoch 5 | Epoch 19 (best) | Epoch 34 (final) |
+|---|---|---|---|---|
+| Val MAE | 58.35% | 6.48% | **5.49%** | 5.59% |
+| Val R² | −34.76 | 0.25 | **0.437** | 0.388 |
+| Val ClinAcc | 5.4% | 69.4% | **76.2%** | 72.6% |
+| Learning rate | 2e-4 | 1e-3 | 9.5e-4 | 7.9e-4 |
+
+All 8 specialists converged within 19–50 epochs (well under the 100-epoch ceiling).
+
+#### Quantitative Metrics
+
+**Regression metrics (primary):**
+
+| Metric | Definition | Why Used |
+|---|---|---|
+| **MAE** | $\frac{1}{n}\sum\|y - \hat{y}\|$ | Primary — directly interpretable as "average error in EF percentage points" |
+| **R²** | $1 - \frac{\text{SS}_\text{res}}{\text{SS}_\text{tot}}$ | Measures variance explained; critical because negative R² = worse than predicting the mean |
+| **RMSE** | $\sqrt{\frac{1}{n}\sum(y - \hat{y})^2}$ | Penalizes large errors more heavily than MAE |
+| **Within ±5%** | $\frac{1}{n}\sum\mathbb{1}[\|y-\hat{y}\| \leq 5]$ | Fraction of predictions within one clinically meaningful step |
+| **Within ±10%** | $\frac{1}{n}\sum\mathbb{1}[\|y-\hat{y}\| \leq 10]$ | Fraction within two clinical steps (broader tolerance) |
+| **Prediction diversity** | $\sigma(\hat{y})$ and count of unique values | Detects mode collapse — σ < 3.0 flags "possible collapse" |
+
+**Clinical metrics (interpretive):**
+
+| Metric | Definition | Why Used |
+|---|---|---|
+| **Clinical Accuracy** | Fraction matching the correct EF category (age-adjusted) | The metric clinicians actually care about — is the patient normal, borderline, or reduced? |
+| **Abnormal Sensitivity** | $\frac{\text{TP}}{\text{TP} + \text{FN}}$ for non-normal EF | Critical safety metric — how many sick children does the system catch? |
+| **Abnormal Specificity** | $\frac{\text{TN}}{\text{TN} + \text{FP}}$ for non-normal EF | Avoids unnecessary referrals (false positives) |
+| **Per-category F1** | Harmonic mean of precision and recall per EF category | Handles class imbalance better than accuracy alone |
+| **Error by EF range** | MAE computed within EF bins (< 30%, 30–45%, 45–55%, 55–70%, > 70%) | Reveals if the model is accurate across the full pathology spectrum or only for normal hearts |
+
+**Z-score metrics (pediatric-specific):**
+
+EF varies by age — a 50% EF is normal for a neonate but concerning for an
+adolescent. We compute age-adjusted Z-scores using a pediatric nomogram
+derived from 2,779 normal EchoNet-Pediatric patients (EF 55–73%):
+
+$$\mu_\text{EF}(\text{age, sex, BSA}) = 64.78 - 0.13 \times \text{age} + 0.37 \times \text{male} + 0.66 \times \text{BSA}$$
+
+$$Z = \frac{\text{EF} - \mu_\text{adjusted}}{\sigma}, \quad \sigma = 4.15\%$$
+
+Z-score flags: **Critical** (Z ≤ −3.0), **Reduced** (−3.0 to −2.0),
+**Borderline** (−2.0 to −1.5), **Normal** (−1.5 to +1.5),
+**Hyperdynamic** (Z ≥ +2.0).
+
+#### Qualitative Metrics: MedGemma VLM Validation
+
+Beyond numerical accuracy, we evaluate the **qualitative clinical reasoning**
+produced by MedGemma's VLM critic:
+
+1. **LV Description Quality:** Does MedGemma accurately describe what it sees in the
+   echo frames? We assess whether descriptions correctly identify chamber size
+   (normal vs dilated), wall motion quality (normal vs reduced), and contractile
+   function — despite never having been trained on echocardiographic images.
+
+2. **Verdict Appropriateness:** When MedGemma issues AGREE, UNCERTAIN, or DISAGREE,
+   is the verdict consistent with the visual evidence? A DISAGREE on a clearly
+   normal-appearing heart with normal regression EF would indicate hallucination.
+
+3. **Confidence Calibration:** After the VLM adjusts confidence (×1.10 for AGREE,
+   ×0.85 for UNCERTAIN, ×0.60 for DISAGREE), is the resulting confidence correlated
+   with actual prediction accuracy? Well-calibrated confidence enables clinicians
+   to appropriately weight the AI's recommendation.
+
+4. **Prompt Transparency:** Every VLM interaction is fully inspectable in the demo
+   UI via "Show prompt" — the user can see exactly what information MedGemma
+   received, enabling clinical audit and building trust.
+
+#### Geometric EF: Physics-Based Cross-Check
+
+The geometric EF pipeline provides a complementary, physics-based validation
+that does not rely on learned regression patterns:
+
+**Segmentation model:** DeepLabV3-MobileNetV3-Large, trained on expert LV
+contours from VolumeTracings.csv (10 epochs, batch=32, lr=1e-3, AdamW,
+class weights [0.3 background, 2.0 LV]).
+
+**Calibration:** Raw area-based EF systematically overestimates clinical EF
+because cross-sectional area change ≠ volumetric change. Linear calibration
+fitted on the training set:
+
+| View | Calibration Equation | IoU |
+|---|---|---|
+| A4C | $\text{EF}_\text{cal} = 0.378 \times \text{EF}_\text{area} + 46.66$ | 0.809 |
+| PSAX | $\text{EF}_\text{cal} = 0.752 \times \text{EF}_\text{area} + 20.66$ | 0.828 |
+
+**Graduated ensemble blending (clinically motivated):**
+
+| Geometric EF Range | Regression Weight | Geometric Weight | Rationale |
+|---|---|---|---|
+| < 40% (structural) | 20% | **80%** | Geometric captures severe dysfunction directly |
+| 40–55% (borderline) | 50% | 50% | Equal trust in ambiguous zone |
+| ≥ 55% (normal) | **70%** | 30% | Regression more precise for normal variation |
+
+These thresholds were **clinically motivated, not grid-searched** — they
+reflect the clinical observation that area-based methods are most reliable
+for detecting structural abnormalities (large LV dilation visible in
+cross-section) but less precise for distinguishing 58% from 62% in the
+normal range.
+
+**Geometric results (PSAX, test set):**
+
+| Method | MAE ↓ | Clinical Accuracy ↑ | Abnormal Sensitivity ↑ |
+|---|---|---|---|
+| Regression only | 5.69% | 85.0% | 40.8% |
+| Geometric only | 5.35% | 81.9% | **65.8%** |
+| Graduated ensemble | **4.97%** | **85.7%** | 47.4% |
+
+The geometric pipeline achieves the **highest abnormal sensitivity** (65.8%)
+of any single method — meaning it catches more children with reduced EF —
+because it directly measures physical contraction rather than relying on
+learned patterns that can be biased by the 75% normal class prevalence.
+
+#### Confidence Scoring: Two Independent Signals
+
+The confidence score combines two complementary signals via geometric mean:
+
+1. **Consistency score** (inter-specialist agreement):
+   $$\text{consistency} = \sigma\left(k \cdot (c - \sigma_\text{pred})\right), \quad k=0.30, \; c=3.0$$
+   When all 4 specialists agree (σ → 0), consistency → 0.95.
+   When they disagree by σ > 8%, consistency drops below 0.30.
+
+2. **Z-score clarity** (distance from decision boundary):
+   $$\text{z\_conf} = \sigma\left(0.5 \cdot (|Z| - 1.5)\right)$$
+   Extreme Z-scores (clearly abnormal or clearly normal) yield high confidence.
+   Z near ±1.5 (borderline) yields low confidence.
+
+3. **Combined:**
+   $$\text{overall} = \text{clip}\left(\sqrt{\text{consistency} \times \text{z\_confidence}},\; 0.01,\; 0.99\right)$$
+
+#### Dual-View Fusion: Conservative Consensus
+
+When both A4C and PSAX are available, project_echo fuses conservatively:
+
+- **Primary view** = whichever predicts the **lower** (more pathological) EF.
+  Clinical rationale: a cardiologist acts on the more concerning reading.
+- **Fused EF** = confidence-weighted average:
+  $$\text{EF}_\text{fused} = \frac{w_A \cdot \text{EF}_A + w_P \cdot \text{EF}_P}{w_A + w_P}$$
+  where $w = \text{confidence}_\text{overall}$ for each view.
+- **Cross-view disagreement** (|ΔEF| > 10%) triggers a confidence penalty:
+  $$w_\text{penalty} = 1 - 0.4 \times \min\left(\frac{|\Delta\text{EF}|}{30}, 1\right)$$
+  Up to −40% confidence reduction at |ΔEF| = 30%, flagging cases that need
+  human review.
+
+#### Ablation: Why an Ensemble of 4 Architectures?
+
+The 4-architecture ensemble is not arbitrary — each architecture captures
+different temporal features from the same VideoMAE embeddings:
+
+| Architecture | Temporal Modeling | Strength | Weakness |
+|---|---|---|---|
+| **TCN** | Dilated causal convolutions | Multi-scale patterns; computationally efficient | Fixed receptive field |
+| **Transformer** | Multi-head self-attention | Every frame attends to every other; captures global dynamics | More parameters (21.9M) |
+| **Multi-Task** | Classification-regularized regression | Clinically constrained; prevents implausible predictions | Joint optimization challenges |
+| **MLP** | None (mean-pooled) | Maximally simple; ensemble diversity baseline | Discards temporal order |
+
+The ensemble provides two critical properties:
+1. **Accuracy through diversity:** Different architectures make different errors.
+   Weighted averaging cancels uncorrelated noise.
+2. **Uncertainty quantification:** Inter-specialist agreement σ is a calibrated
+   proxy for prediction reliability. Low σ (< 4%) → high confidence → reliable
+   prediction. High σ (> 8%) → flag for human review.
+
+---
+
 ### Why project_echo Fits Each Track
 
 | Track | Fit |
