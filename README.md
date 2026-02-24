@@ -111,6 +111,11 @@ typically reach the referring physician in 24–48 hours.
 
 ### The Two Views project_echo Analyzes
 
+| A4C View — Apical Four-Chamber | PSAX View — Parasternal Short-Axis |
+|:---:|:---:|
+| ![A4C Echo](figures/a4c_echo.gif) | ![PSAX Echo](figures/psax_echo.gif) |
+| *Long-axis view showing all four chambers. The LV contracts from ED (max filling) to ES (max contraction).* | *Cross-sectional "donut" view. The LV squeezes concentrically — easy to see the area change.* |
+
 **Apical Four-Chamber (A4C):** Obtained by placing the transducer at the cardiac
 apex, visualizing all four chambers simultaneously [6]. Clinicians assess global
 LV function, regional wall motion (basal/mid/apical segments), mitral and
