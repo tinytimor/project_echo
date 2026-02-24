@@ -108,7 +108,7 @@ def _sanitize(obj):
 
 
 def _offload_models_to_cpu():
-    """Move specialist & segmentation models to CPU to free MPS memory for VLM."""
+    """Move specialist & segmentation models to CPU to free GPU memory for VLM."""
     import torch
     if _engine is not None:
         for key, model in _engine._models.items():
@@ -116,15 +116,22 @@ def _offload_models_to_cpu():
         logger.info("Offloaded specialist models to CPU")
     for view, model in _seg_models.items():
         model.cpu()
-    if torch.backends.mps.is_available():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
         torch.mps.empty_cache()
-    logger.info("MPS memory freed for VLM")
+    logger.info("GPU memory freed for VLM")
 
 
-def _reload_models_to_mps():
-    """Move specialist & segmentation models back to MPS after VLM is done."""
+def _reload_models_to_gpu():
+    """Move specialist & segmentation models back to GPU after VLM is done."""
     import torch
-    device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     if _engine is not None:
         for key, model in _engine._models.items():
             model.to(device)
@@ -822,11 +829,11 @@ async def narrate(req: NarrateRequest):
                 logger.error("narrate stage 2: %s", e)
                 vlm_data = {"error": str(e)}
             finally:
-                # Free VLM memory and restore specialist models to MPS
+                # Free VLM memory and restore specialist models to GPU
                 if _critic is not None:
                     _critic.unload()
                     _critic = None
-                _reload_models_to_mps()
+                _reload_models_to_gpu()
 
     pipeline_steps.append({
         "stage": 2,

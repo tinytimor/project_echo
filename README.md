@@ -182,12 +182,12 @@ feature vectors capturing both spatial anatomy and temporal motion patterns.
 Four lightweight regression heads then independently estimate EF, each bringing
 a different inductive bias — like four specialists reading the same study:
 
-| Specialist | Architecture | Why It Exists | A4C MAE | PSAX MAE |
-|---|---|---|---|---|
-| **Pattern Matcher** | TCN (dilated convolutions) | Captures multi-scale temporal patterns (dilation 1,2,4,8) | **5.49%** | 5.14% |
-| **Motion Analyst** | Temporal Transformer (2-layer, 8-head) | Attends to frame-to-frame motion relationships | 5.78% | **5.08%** |
-| **Guardrail** | Multi-Task (regression + classification) | Joint loss prevents extreme outliers via category bounds | 6.14% | 5.43% |
-| **Baseline** | MLP (mean-pooled) | Ablation anchor — proves temporal modeling helps | 6.55% | 5.64% |
+| Specialist | Architecture | Why It Exists | A4C MAE | A4C Acc | PSAX MAE | PSAX Acc |
+|---|---|---|---|---|---|---|
+| **Pattern Matcher** | TCN (dilated convolutions) | Captures multi-scale temporal patterns (dilation 1,2,4,8) | **5.49%** | **76.2%** | 5.14% | 74.6% |
+| **Motion Analyst** | Temporal Transformer (2-layer, 8-head) | Attends to frame-to-frame motion relationships | 5.78% | 74.1% | **5.08%** | **74.8%** |
+| **Guardrail** | Multi-Task (regression + classification) | Joint loss prevents extreme outliers via category bounds | 6.14% | 67.9% | 5.43% | 69.6% |
+| **Baseline** | MLP (mean-pooled) | Ablation anchor — proves temporal modeling helps | 6.55% | 67.0% | 5.64% | 67.2% |
 
 The ensemble combines predictions using performance-weighted voting:
 

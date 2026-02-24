@@ -121,8 +121,10 @@
             background: #000;
             border-radius: 6px;
             width: 100%;
+            max-width: 280px;
             aspect-ratio: 1/1;
             object-fit: contain;
+            margin: 0 auto;
         }
 
         .pattern-btn {
@@ -170,6 +172,8 @@
             border: 2px solid transparent;
             transition: border-color .2s;
             cursor: pointer;
+            max-width: 220px;
+            margin: 0 auto;
         }
 
         .seg-frame:hover {
@@ -181,6 +185,8 @@
             background: #000;
             border-radius: 8px;
             overflow: hidden;
+            max-width: 280px;
+            margin: 0 auto;
         }
 
         .seg-player canvas {
@@ -472,32 +478,7 @@
                                             </div>
                                             <span class="badge bg-[#21262d] text-[#8b949e]" x-text="view"></span>
                                         </div>
-                                        <div class="relative">
-                                            <template
-                                                x-if="selected.has_video && selected.has_video[view] && !videoError[view]">
-                                                <video class="echo-video" autoplay loop muted playsinline
-                                                    :src="`/api/video/${selected.patient_id}/${view}`"
-                                                    @error="videoError[view] = true"></video>
-                                            </template>
-                                            <template x-if="!selected.has_video?.[view] || videoError[view]">
-                                                <div class="echo-video flex items-center justify-center">
-                                                    <template x-if="frames[view]">
-                                                        <div class="grid grid-cols-3 gap-1 p-1 w-full">
-                                                            <template x-for="k in ['ed','mid','es']" :key="k">
-                                                                <div class="text-center">
-                                                                    <img :src="'data:image/jpeg;base64,' + frames[view][k]"
-                                                                        class="rounded w-full" />
-                                                                    <p class="text-[10px] mt-1 text-[#8b949e]"
-                                                                        x-text="k.toUpperCase()"></p>
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="!frames[view]"><span
-                                                            class="text-[#8b949e] text-xs">No video</span></template>
-                                                </div>
-                                            </template>
-                                        </div>
+                                        <!-- Specialist roundtable data FIRST -->
                                         <template x-if="analysis && analysis[view] && !analysis[view].error">
                                             <div class="space-y-3">
                                                 <div class="flex items-center gap-2">
@@ -598,447 +579,501 @@
                                                             x-text="sigmaStr(analysis[view].specialist_roundtable)"></p>
                                                     </div>
                                                 </div>
-                                                <button @click="runVLM(view)"
-                                                    :disabled="loadingVLM[view] || !selected.has_video || !selected.has_video[view]"
-                                                    class="w-full mt-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all disabled:opacity-40 disabled:cursor-not-allowed border-[#388bfd]/40 text-[#58a6ff] hover:bg-[#388bfd]/10 hover:border-[#58a6ff]">
-                                                    <template x-if="!loadingVLM[view]"><span>&#128300; Run VLM Senior
-                                                            Attending</span></template>
-                                                    <template x-if="loadingVLM[view]"><span
-                                                            class="flex items-center justify-center gap-2"><svg
-                                                                class="w-3 h-3 animate-spin" fill="none"
-                                                                viewBox="0 0 24 24">
-                                                                <circle class="opacity-25" cx="12" cy="12" r="10"
-                                                                    stroke="currentColor" stroke-width="4" />
-                                                                <path class="opacity-75" fill="currentColor"
-                                                                    d="M4 12a8 8 0 018-8v8H4z" />
-                                                            </svg>MedGemma 4B analyzing...</span></template>
-                                                </button>
-                                                <template x-if="vlm[view]">
-                                                    <div class="slide-in card p-3 space-y-2 border"
-                                                        :class="vlm[view].verdict === 'agree' ? 'border-[#3fb950]/40' : vlm[view].verdict === 'disagree' ? 'border-[#f85149]/40' : 'border-[#d29922]/40'">
-                                                        <div class="flex items-center justify-between">
-                                                            <span class="text-xs font-bold text-[#8b949e]">Senior
-                                                                Attending (MedGemma 4B)</span>
-                                                            <span class="badge font-bold"
-                                                                :class="vlm[view].verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : vlm[view].verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
-                                                                x-text="vlm[view].verdict === 'agree' ? 'CONFIRMS EF' : vlm[view].verdict === 'disagree' ? 'DISPUTES EF' : 'UNCERTAIN'"></span>
-                                                        </div>
-                                                        <p class="text-xs text-[#c9d1d9] leading-relaxed"
-                                                            x-text="vlm[view].lv_description"></p>
-                                                        <div class="flex items-center gap-3 text-[10px]">
-                                                            <span class="text-[#8b949e]">Confidence:</span>
-                                                            <span
-                                                                x-text="(vlm[view].confidence_original * 100).toFixed(0) + '%'"></span>
-                                                            <span class="text-[#8b949e]">&rarr;</span>
-                                                            <span class="font-bold"
-                                                                :style="`color:${confColor(vlm[view].confidence_adjusted)}`"
-                                                                x-text="(vlm[view].confidence_adjusted * 100).toFixed(0) + '%'"></span>
-                                                        </div>
-                                                        <details class="text-[10px]">
-                                                            <summary
-                                                                class="cursor-pointer text-[#8b949e] hover:text-[#c9d1d9]">
-                                                                Show prompt</summary>
-                                                            <pre class="mt-1 p-2 bg-[#0d1117] rounded text-[#8b949e] whitespace-pre-wrap overflow-auto max-h-48"
-                                                                x-text="vlm[view].prompt"></pre>
-                                                        </details>
-                                                    </div>
-                                                </template>
                                             </div>
                                         </template>
-                                        <template x-if="loadingAnalysis && !analysis">
-                                            <div class="space-y-2 animate-pulse">
-                                                <div class="h-3 bg-[#21262d] rounded w-3/4"></div>
-                                                <div class="h-3 bg-[#21262d] rounded w-full"></div>
+                                        <!-- Echo video BELOW specialist data, smaller -->
+                                        <div class="relative">
+                                            <template
+                                                x-if="selected.has_video && selected.has_video[view] && !videoError[view]">
+                                                <video class="echo-video" autoplay loop muted playsinline
+                                                    :src="`/api/video/${selected.patient_id}/${view}`"
+                                                    @error="videoError[view] = true"></video>
+                                            </template>
+                                            <template x-if="!selected.has_video?.[view] || videoError[view]">
+                                                <div class="echo-video flex items-center justify-center">
+                                                    <template x-if="frames[view]">
+                                                        <div class="grid grid-cols-3 gap-1 p-1 w-full">
+                                                            <template x-for="k in ['ed','mid','es']" :key="k">
+                                                                <div class="text-center">
+                                                                    <img :src="'data:image/jpeg;base64,' + frames[view][k]"
+                                                                        class="rounded w-full" />
+                                                                    <p class="text-[10px] mt-1 text-[#8b949e]"
+                                                                        x-text="k.toUpperCase()"></p>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="!frames[view]"><span
+                                                            class="text-[#8b949e] text-xs">No video</span></template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <button @click="runVLM(view)"
+                                            :disabled="loadingVLM[view] || !selected.has_video || !selected.has_video[view]"
+                                            class="w-full mt-1 py-2 px-3 rounded-md text-xs font-semibold border transition-all disabled:opacity-40 disabled:cursor-not-allowed border-[#388bfd]/40 text-[#58a6ff] hover:bg-[#388bfd]/10 hover:border-[#58a6ff]">
+                                            <template x-if="!loadingVLM[view]"><span>&#128300; Run VLM Senior
+                                                    Attending</span></template>
+                                            <template x-if="loadingVLM[view]"><span
+                                                    class="flex items-center justify-center gap-2"><svg
+                                                        class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10"
+                                                            stroke="currentColor" stroke-width="4" />
+                                                        <path class="opacity-75" fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8v8H4z" />
+                                                    </svg>MedGemma 4B analyzing...</span></template>
+                                        </button>
+                                        <template x-if="vlm[view]">
+                                            <div class="slide-in card p-3 space-y-2 border"
+                                                :class="vlm[view].verdict === 'agree' ? 'border-[#3fb950]/40' : vlm[view].verdict === 'disagree' ? 'border-[#f85149]/40' : 'border-[#d29922]/40'">
+                                                <div class="flex items-center justify-between">
+                                                    <span class="text-xs font-bold text-[#8b949e]">Senior
+                                                        Attending (MedGemma 4B)</span>
+                                                    <span class="badge font-bold"
+                                                        :class="vlm[view].verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : vlm[view].verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
+                                                        x-text="vlm[view].verdict === 'agree' ? 'CONFIRMS EF' : vlm[view].verdict === 'disagree' ? 'DISPUTES EF' : 'UNCERTAIN'"></span>
+                                                </div>
+                                                <p class="text-xs text-[#c9d1d9] leading-relaxed"
+                                                    x-text="vlm[view].lv_description"></p>
+                                                <div class="flex items-center gap-3 text-[10px]">
+                                                    <span class="text-[#8b949e]">Confidence:</span>
+                                                    <span
+                                                        x-text="(vlm[view].confidence_original * 100).toFixed(0) + '%'"></span>
+                                                    <span class="text-[#8b949e]">&rarr;</span>
+                                                    <span class="font-bold"
+                                                        :style="`color:${confColor(vlm[view].confidence_adjusted)}`"
+                                                        x-text="(vlm[view].confidence_adjusted * 100).toFixed(0) + '%'"></span>
+                                                </div>
+                                                <details class="text-[10px]">
+                                                    <summary class="cursor-pointer text-[#8b949e] hover:text-[#c9d1d9]">
+                                                        Show prompt</summary>
+                                                    <pre class="mt-1 p-2 bg-[#0d1117] rounded text-[#8b949e] whitespace-pre-wrap overflow-auto max-h-48"
+                                                        x-text="vlm[view].prompt"></pre>
+                                                </details>
                                             </div>
                                         </template>
                                     </div>
                                 </template>
-                            </div>
-                            <!-- DUAL-VIEW FUSION -->
-                            <template x-if="analysis && analysis.fused && !analysis.fused.error">
-                                <div class="card p-4 slide-in">
-                                    <div class="flex items-center justify-between mb-3">
-                                        <h3 class="font-semibold text-white">Dual-View Conservative Fusion</h3>
-                                        <span class="text-xs text-[#8b949e]">Primary = lower EF</span>
+                                <template x-if="loadingAnalysis && !analysis">
+                                    <div class="space-y-2 animate-pulse">
+                                        <div class="h-3 bg-[#21262d] rounded w-3/4"></div>
+                                        <div class="h-3 bg-[#21262d] rounded w-full"></div>
                                     </div>
-                                    <div class="grid grid-cols-3 gap-4 items-center">
-                                        <div class="card p-3 text-center space-y-1"
-                                            :class="analysis.fused.primary_view === 'A4C' ? 'border-[#58a6ff] border-2' : 'opacity-60'">
-                                            <p class="text-xs text-[#8b949e]">A4C</p>
-                                            <p class="text-2xl font-bold"
-                                                :style="`color:${flagColor(analysis.A4C?.zscore?.flag)}`"
-                                                x-text="analysis.A4C?.ef_predicted + '%'"></p>
-                                            <template x-if="analysis.fused.primary_view === 'A4C'"><span
-                                                    class="badge bg-[#58a6ff]/20 text-[#58a6ff]">PRIMARY</span></template>
-                                        </div>
-                                        <div class="text-center space-y-1">
-                                            <p class="text-xs text-[#8b949e]">&Delta;EF</p>
-                                            <p class="font-bold text-lg"
-                                                :class="analysis.fused.views_agree ? 'text-[#3fb950]' : 'text-[#f85149]'"
-                                                x-text="analysis.fused.ef_delta_pct + '%'"></p>
-                                            <p class="text-[10px]"
-                                                :class="analysis.fused.views_agree ? 'text-[#3fb950]' : 'text-[#f85149]'"
-                                                x-text="analysis.fused.views_agree ? '\u2713 AGREE' : '\u26A0 DISAGREE'">
+                                </template>
+                            </div>
+                    </template>
+                </div>
+                <!-- DUAL-VIEW FUSION -->
+                <template x-if="analysis && analysis.fused && !analysis.fused.error">
+                    <div class="card p-4 slide-in">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-white">Dual-View Conservative Fusion</h3>
+                            <span class="text-xs text-[#8b949e]">Primary = lower EF</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 items-center">
+                            <div class="card p-3 text-center space-y-1"
+                                :class="analysis.fused.primary_view === 'A4C' ? 'border-[#58a6ff] border-2' : 'opacity-60'">
+                                <p class="text-xs text-[#8b949e]">A4C</p>
+                                <p class="text-2xl font-bold" :style="`color:${flagColor(analysis.A4C?.zscore?.flag)}`"
+                                    x-text="analysis.A4C?.ef_predicted + '%'"></p>
+                                <template x-if="analysis.fused.primary_view === 'A4C'"><span
+                                        class="badge bg-[#58a6ff]/20 text-[#58a6ff]">PRIMARY</span></template>
+                            </div>
+                            <div class="text-center space-y-1">
+                                <p class="text-xs text-[#8b949e]">&Delta;EF</p>
+                                <p class="font-bold text-lg"
+                                    :class="analysis.fused.views_agree ? 'text-[#3fb950]' : 'text-[#f85149]'"
+                                    x-text="analysis.fused.ef_delta_pct + '%'"></p>
+                                <p class="text-[10px]"
+                                    :class="analysis.fused.views_agree ? 'text-[#3fb950]' : 'text-[#f85149]'"
+                                    x-text="analysis.fused.views_agree ? '\u2713 AGREE' : '\u26A0 DISAGREE'">
+                                </p>
+                            </div>
+                            <div class="card p-3 text-center space-y-1"
+                                :class="analysis.fused.primary_view === 'PSAX' ? 'border-[#58a6ff] border-2' : 'opacity-60'">
+                                <p class="text-xs text-[#8b949e]">PSAX</p>
+                                <p class="text-2xl font-bold" :style="`color:${flagColor(analysis.PSAX?.zscore?.flag)}`"
+                                    x-text="analysis.PSAX?.ef_predicted + '%'"></p>
+                                <template x-if="analysis.fused.primary_view === 'PSAX'"><span
+                                        class="badge bg-[#58a6ff]/20 text-[#58a6ff]">PRIMARY</span></template>
+                            </div>
+                        </div>
+                        <div class="mt-4 p-3 rounded-md"
+                            :style="`background:${flagColor(analysis.fused.primary?.zscore?.flag)}15;border:1px solid ${flagColor(analysis.fused.primary?.zscore?.flag)}40`">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-xs text-[#8b949e]">Fused EF</span>
+                                    <span class="text-3xl font-bold ml-2"
+                                        :style="`color:${flagColor(analysis.fused.primary?.zscore?.flag)}`"
+                                        x-text="analysis.fused.fused_ef + '%'"></span>
+                                </div>
+                                <template x-if="analysis.fused.primary?.zscore?.flag === 'critical'">
+                                    <div class="pulse-critical text-right">
+                                        <p class="text-[#f85149] font-bold text-sm">&#128680; URGENT</p>
+                                        <p class="text-[#f85149] text-xs">Page Cardiologist</p>
+                                    </div>
+                                </template>
+                            </div>
+                            <p class="text-xs text-[#8b949e] mt-2" x-text="analysis.fused.summary"></p>
+                        </div>
+                    </div>
+                </template>
+    </div>
+    </template>
+
+    <!-- TAB: GEOMETRIC EF & SEGMENTATION -->
+    <template x-if="activeTab === 'geometric'">
+        <div class="space-y-4">
+            <template x-for="view in selected.views" :key="'geo-' + view">
+                <div class="card p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold text-white flex items-center gap-2">
+                            <span>&#128208;</span>
+                            <span x-text="view + ' \u2014 LV Segmentation & Geometric EF'"></span>
+                        </h3>
+                        <template x-if="geometric[view]">
+                            <div class="flex items-center gap-3">
+                                <span class="badge bg-[#3fb950]/20 text-[#3fb950]"
+                                    x-text="'IoU: ' + (view === 'PSAX' ? '0.828' : '0.809')"></span>
+                                <span class="badge bg-[#21262d] text-[#8b949e]">DeepLabV3-MobileNetV3</span>
+                            </div>
+                        </template>
+                    </div>
+                    <template x-if="loadingGeometric && !geometric[view]">
+                        <div class="flex items-center gap-3 text-sm text-[#8b949e]">
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                            Running LV segmentation on all frames...
+                        </div>
+                    </template>
+                    <template x-if="geometric[view]">
+                        <div class="space-y-4 slide-in"
+                            :style="'--seg-color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">
+                            <!-- Clinical explanation -->
+                            <div class="explain-box">
+                                <p class="text-xs font-bold mb-1"
+                                    :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">
+                                    &#128300; What You're
+                                    Seeing</p>
+                                <p class="text-xs text-[#c9d1d9] leading-relaxed">The <strong
+                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">colored
+                                        overlay</strong> is the
+                                    <strong>Left Ventricle (LV)</strong> &mdash; the heart's main
+                                    pumping chamber, segmented by our trained DeepLabV3 model. The
+                                    <strong
+                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">contour
+                                        line</strong> traces the LV
+                                    boundary. By measuring how much the LV area changes between maximum
+                                    filling (<span class="text-[#58a6ff]">ED</span>) and maximum
+                                    contraction (<span class="text-[#f0883e]">ES</span>), we compute
+                                    <strong>Ejection Fraction</strong> &mdash; the percentage of blood
+                                    pumped out per heartbeat.
+                                </p>
+                                <p class="text-xs text-[#8b949e] mt-2"><strong>Why it matters:</strong>
+                                    Geometric EF achieves <strong
+                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">70.1%
+                                        abnormal
+                                        sensitivity</strong> &mdash; the highest of any method &mdash;
+                                    because it directly measures physical contraction rather than
+                                    relying on learned patterns that can miss rare pathology.</p>
+                            </div>
+                            <!-- Animated segmentation player -->
+                            <div>
+                                <p class="text-xs font-bold text-[#8b949e] uppercase tracking-wider mb-2">
+                                    LV Segmentation Animation</p>
+                                <div class="seg-player">
+                                    <canvas :id="'seg-canvas-' + view" width="224" height="224"></canvas>
+                                    <div class="seg-controls">
+                                        <button @click="toggleSegPlay(view)"
+                                            class="text-xs text-[#c9d1d9] hover:text-white w-6">
+                                            <span x-text="segPlaying[view] ? '⏸' : '▶'"></span>
+                                        </button>
+                                        <input type="range" class="seg-scrubber" min="0"
+                                            :max="(segFrames[view]?.length || 1) - 1" :value="segIdx[view] || 0"
+                                            @input="seekSeg(view, $event.target.value)" />
+                                        <span class="text-[10px] text-[#8b949e] w-20 text-right"
+                                            x-text="'F' + (segIdx[view] || 0) + '/' + ((segFrames[view]?.length || 0) - 1)"></span>
+                                        <span class="text-[10px] font-mono"
+                                            :class="(segAreas[view]?.[segIdx[view]] || 0) > 0.15 ? 'text-[#58a6ff]' : 'text-[#f0883e]'"
+                                            x-text="'LV: ' + ((segAreas[view]?.[segIdx[view]] || 0) * 100).toFixed(1) + '%'"></span>
+                                    </div>
+                                </div>
+                                <div x-init="loadSegVideo(view)"></div>
+                            </div>
+                            <!-- ED / ES key frames -->
+                            <div>
+                                <p class="text-xs font-bold text-[#8b949e] uppercase tracking-wider mb-2">
+                                    Key Frames: End-Diastole vs End-Systole</p>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <template x-for="phase in ['ed', 'es']" :key="phase">
+                                        <div class="text-center">
+                                            <img :src="'data:image/jpeg;base64,' + geometric[view].segmentation_frames[phase]"
+                                                class="seg-frame w-full rounded-lg"
+                                                :style="'--seg-color:' + (geometric[view]?.overlay_color || '#3fb950')" />
+                                            <div class="mt-2 flex items-center justify-center gap-2">
+                                                <span class="badge"
+                                                    :class="phase === 'ed' ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#f0883e]/20 text-[#f0883e]'"
+                                                    x-text="phase.toUpperCase()"></span>
+                                                <span class="text-xs text-[#8b949e]"
+                                                    x-text="'Frame ' + geometric[view][phase + '_frame']"></span>
+                                                <span class="text-xs font-mono"
+                                                    :class="phase === 'ed' ? 'text-[#58a6ff]' : 'text-[#f0883e]'"
+                                                    x-text="(phase === 'ed' ? geometric[view].ed_area_pct : geometric[view].es_area_pct) + '% LV'"></span>
+                                            </div>
+                                            <p class="text-[10px] text-[#8b949e] mt-1"
+                                                x-text="phase === 'ed' ? 'Maximum filling — LV at largest' : 'Maximum contraction — LV at smallest'">
                                             </p>
                                         </div>
-                                        <div class="card p-3 text-center space-y-1"
-                                            :class="analysis.fused.primary_view === 'PSAX' ? 'border-[#58a6ff] border-2' : 'opacity-60'">
-                                            <p class="text-xs text-[#8b949e]">PSAX</p>
-                                            <p class="text-2xl font-bold"
-                                                :style="`color:${flagColor(analysis.PSAX?.zscore?.flag)}`"
-                                                x-text="analysis.PSAX?.ef_predicted + '%'"></p>
-                                            <template x-if="analysis.fused.primary_view === 'PSAX'"><span
-                                                    class="badge bg-[#58a6ff]/20 text-[#58a6ff]">PRIMARY</span></template>
-                                        </div>
-                                    </div>
-                                    <div class="mt-4 p-3 rounded-md"
-                                        :style="`background:${flagColor(analysis.fused.primary?.zscore?.flag)}15;border:1px solid ${flagColor(analysis.fused.primary?.zscore?.flag)}40`">
-                                        <div class="flex items-center justify-between">
-                                            <div>
-                                                <span class="text-xs text-[#8b949e]">Fused EF</span>
-                                                <span class="text-3xl font-bold ml-2"
-                                                    :style="`color:${flagColor(analysis.fused.primary?.zscore?.flag)}`"
-                                                    x-text="analysis.fused.fused_ef + '%'"></span>
-                                            </div>
-                                            <template x-if="analysis.fused.primary?.zscore?.flag === 'critical'">
-                                                <div class="pulse-critical text-right">
-                                                    <p class="text-[#f85149] font-bold text-sm">&#128680; URGENT</p>
-                                                    <p class="text-[#f85149] text-xs">Page Cardiologist</p>
-                                                </div>
-                                            </template>
-                                        </div>
-                                        <p class="text-xs text-[#8b949e] mt-2" x-text="analysis.fused.summary"></p>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- TAB: GEOMETRIC EF & SEGMENTATION -->
-                    <template x-if="activeTab === 'geometric'">
-                        <div class="space-y-4">
-                            <template x-for="view in selected.views" :key="'geo-' + view">
-                                <div class="card p-4 space-y-4">
-                                    <div class="flex items-center justify-between">
-                                        <h3 class="font-semibold text-white flex items-center gap-2">
-                                            <span>&#128208;</span>
-                                            <span x-text="view + ' \u2014 LV Segmentation & Geometric EF'"></span>
-                                        </h3>
-                                        <template x-if="geometric[view]">
-                                            <div class="flex items-center gap-3">
-                                                <span class="badge bg-[#3fb950]/20 text-[#3fb950]"
-                                                    x-text="'IoU: ' + (view === 'PSAX' ? '0.828' : '0.809')"></span>
-                                                <span
-                                                    class="badge bg-[#21262d] text-[#8b949e]">DeepLabV3-MobileNetV3</span>
-                                            </div>
-                                        </template>
-                                    </div>
-                                    <template x-if="loadingGeometric && !geometric[view]">
-                                        <div class="flex items-center gap-3 text-sm text-[#8b949e]">
-                                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                    stroke-width="4" />
-                                                <path class="opacity-75" fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8v8H4z" />
-                                            </svg>
-                                            Running LV segmentation on all frames...
-                                        </div>
                                     </template>
-                                    <template x-if="geometric[view]">
-                                        <div class="space-y-4 slide-in"
-                                            :style="'--seg-color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">
-                                            <!-- Clinical explanation -->
-                                            <div class="explain-box">
-                                                <p class="text-xs font-bold mb-1"
-                                                    :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">
-                                                    &#128300; What You're
-                                                    Seeing</p>
-                                                <p class="text-xs text-[#c9d1d9] leading-relaxed">The <strong
-                                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">colored
-                                                        overlay</strong> is the
-                                                    <strong>Left Ventricle (LV)</strong> &mdash; the heart's main
-                                                    pumping chamber, segmented by our trained DeepLabV3 model. The
-                                                    <strong
-                                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">contour
-                                                        line</strong> traces the LV
-                                                    boundary. By measuring how much the LV area changes between maximum
-                                                    filling (<span class="text-[#58a6ff]">ED</span>) and maximum
-                                                    contraction (<span class="text-[#f0883e]">ES</span>), we compute
-                                                    <strong>Ejection Fraction</strong> &mdash; the percentage of blood
-                                                    pumped out per heartbeat.
+                                </div>
+                            </div>
+                            <!-- LV Area Timeline -->
+                            <div x-data="{ showTimelineInfo: false }">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <p class="text-xs font-bold text-[#8b949e] uppercase tracking-wider">
+                                        LV Area Timeline</p>
+                                    <div class="relative">
+                                        <button @click="showTimelineInfo = !showTimelineInfo"
+                                            class="w-4 h-4 rounded-full bg-[#30363d] text-[#8b949e] hover:text-white hover:bg-[#484f58] text-[10px] font-bold flex items-center justify-center transition-colors"
+                                            title="What does this chart mean?">?</button>
+                                        <div x-show="showTimelineInfo" x-transition
+                                            @click.outside="showTimelineInfo = false"
+                                            class="absolute left-0 top-6 z-50 w-80 p-3 rounded-lg border border-[#30363d] bg-[#161b22] shadow-xl">
+                                            <p class="text-xs font-bold text-[#3fb950] mb-2">&#128147; LV Area Timeline
+                                                — Clinical Significance</p>
+                                            <p class="text-xs text-[#c9d1d9] leading-relaxed mb-2">
+                                                This chart tracks the <strong>Left Ventricular cavity area</strong>
+                                                across every frame of the echocardiogram video. It is the fundamental
+                                                measurement from which <strong>Ejection Fraction</strong> is derived.
+                                            </p>
+                                            <div class="space-y-1 text-[11px] text-[#c9d1d9]">
+                                                <p><span class="text-[#58a6ff] font-bold">&#9650; Peaks</span> =
+                                                    <strong>End-Diastole (ED)</strong> — the heart is fully relaxed, LV
+                                                    at maximum filling.
                                                 </p>
-                                                <p class="text-xs text-[#8b949e] mt-2"><strong>Why it matters:</strong>
-                                                    Geometric EF achieves <strong
-                                                        :style="'color:' + (this.flagColor(analysis?.[view]?.zscore?.flag) || geometric[view]?.overlay_color || '#3fb950')">70.1%
-                                                        abnormal
-                                                        sensitivity</strong> &mdash; the highest of any method &mdash;
-                                                    because it directly measures physical contraction rather than
-                                                    relying on learned patterns that can miss rare pathology.</p>
+                                                <p><span class="text-[#f0883e] font-bold">&#9660; Troughs</span> =
+                                                    <strong>End-Systole (ES)</strong> — maximum contraction, LV at
+                                                    smallest.
+                                                </p>
+                                                <p><span class="text-[#3fb950] font-bold">&#8595; Drop</span> =
+                                                    <strong>EF</strong> — the bigger the drop from peak to trough, the
+                                                    stronger the heart pumps.
+                                                </p>
                                             </div>
-                                            <!-- Animated segmentation player -->
-                                            <div>
-                                                <p
-                                                    class="text-xs font-bold text-[#8b949e] uppercase tracking-wider mb-2">
-                                                    LV Segmentation Animation</p>
-                                                <div class="seg-player">
-                                                    <canvas :id="'seg-canvas-' + view" width="224"
-                                                        height="224"></canvas>
-                                                    <div class="seg-controls">
-                                                        <button @click="toggleSegPlay(view)"
-                                                            class="text-xs text-[#c9d1d9] hover:text-white w-6">
-                                                            <span x-text="segPlaying[view] ? '⏸' : '▶'"></span>
-                                                        </button>
-                                                        <input type="range" class="seg-scrubber" min="0"
-                                                            :max="(segFrames[view]?.length || 1) - 1"
-                                                            :value="segIdx[view] || 0"
-                                                            @input="seekSeg(view, $event.target.value)" />
-                                                        <span class="text-[10px] text-[#8b949e] w-20 text-right"
-                                                            x-text="'F' + (segIdx[view] || 0) + '/' + ((segFrames[view]?.length || 0) - 1)"></span>
-                                                        <span class="text-[10px] font-mono"
-                                                            :class="(segAreas[view]?.[segIdx[view]] || 0) > 0.15 ? 'text-[#58a6ff]' : 'text-[#f0883e]'"
-                                                            x-text="'LV: ' + ((segAreas[view]?.[segIdx[view]] || 0) * 100).toFixed(1) + '%'"></span>
-                                                    </div>
-                                                </div>
-                                                <div x-init="loadSegVideo(view)"></div>
-                                            </div>
-                                            <!-- ED / ES key frames -->
-                                            <div>
-                                                <p
-                                                    class="text-xs font-bold text-[#8b949e] uppercase tracking-wider mb-2">
-                                                    Key Frames: End-Diastole vs End-Systole</p>
-                                                <div class="grid grid-cols-2 gap-4">
-                                                    <template x-for="phase in ['ed', 'es']" :key="phase">
-                                                        <div class="text-center">
-                                                            <img :src="'data:image/jpeg;base64,' + geometric[view].segmentation_frames[phase]"
-                                                                class="seg-frame w-full rounded-lg"
-                                                                :style="'--seg-color:' + (geometric[view]?.overlay_color || '#3fb950')" />
-                                                            <div class="mt-2 flex items-center justify-center gap-2">
-                                                                <span class="badge"
-                                                                    :class="phase === 'ed' ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#f0883e]/20 text-[#f0883e]'"
-                                                                    x-text="phase.toUpperCase()"></span>
-                                                                <span class="text-xs text-[#8b949e]"
-                                                                    x-text="'Frame ' + geometric[view][phase + '_frame']"></span>
-                                                                <span class="text-xs font-mono"
-                                                                    :class="phase === 'ed' ? 'text-[#58a6ff]' : 'text-[#f0883e]'"
-                                                                    x-text="(phase === 'ed' ? geometric[view].ed_area_pct : geometric[view].es_area_pct) + '% LV'"></span>
-                                                            </div>
-                                                            <p class="text-[10px] text-[#8b949e] mt-1"
-                                                                x-text="phase === 'ed' ? 'Maximum filling — LV at largest' : 'Maximum contraction — LV at smallest'">
-                                                            </p>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                            <!-- LV Area Timeline -->
-                                            <div>
-                                                <p
-                                                    class="text-xs font-bold text-[#8b949e] uppercase tracking-wider mb-2">
-                                                    LV Area Timeline</p>
-                                                <div class="bg-[#0d1117] rounded-lg p-3" style="height: 200px;"><canvas
-                                                        :id="'area-chart-' + view" class="w-full h-full"></canvas></div>
-                                                <div x-effect="if (geometric[view] && geometric[view].lv_areas) { $nextTick(() => renderAreaChart(view)); }"></div>
-                                            </div>
-                                            <!-- EF cards -->
-                                            <div class="grid grid-cols-3 gap-3">
-                                                <div class="card p-3 text-center border-[#3fb950]/30">
-                                                    <p class="text-[10px] text-[#8b949e] uppercase">Geometric EF</p>
-                                                    <p class="text-2xl font-bold text-[#3fb950]"
-                                                        x-text="geometric[view].geometric_ef + '%'"></p>
-                                                    <p class="text-[10px] text-[#8b949e]"
-                                                        x-text="'Raw: ' + geometric[view].area_ef + '%'"></p>
-                                                </div>
-                                                <template x-if="geometric[view].regression_ef">
-                                                    <div class="card p-3 text-center border-[#58a6ff]/30">
-                                                        <p class="text-[10px] text-[#8b949e] uppercase">Regression EF
-                                                        </p>
-                                                        <p class="text-2xl font-bold text-[#58a6ff]"
-                                                            x-text="geometric[view].regression_ef + '%'"></p>
-                                                        <p class="text-[10px] text-[#8b949e]">8-specialist</p>
-                                                    </div>
-                                                </template>
-                                                <template x-if="geometric[view].ensemble_ef">
-                                                    <div class="card p-3 text-center border-2"
-                                                        :class="geometric[view].blend_zone === 'low' ? 'border-[#f85149]/50' : geometric[view].blend_zone === 'mid' ? 'border-[#d29922]/50' : 'border-[#3fb950]/50'">
-                                                        <p class="text-[10px] text-[#8b949e] uppercase">Graduated
-                                                            Ensemble</p>
-                                                        <p class="text-2xl font-bold text-white"
-                                                            x-text="geometric[view].ensemble_ef + '%'"></p>
-                                                        <p class="text-[10px]"
-                                                            :class="geometric[view].blend_zone === 'low' ? 'text-[#f85149]' : geometric[view].blend_zone === 'mid' ? 'text-[#d29922]' : 'text-[#3fb950]'"
-                                                            x-text="'Geo: ' + (geometric[view].geo_weight * 100) + '%'">
-                                                        </p>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                            <template x-if="geometric[view].blend_desc">
-                                                <div class="p-2 rounded text-xs border"
-                                                    :class="geometric[view].blend_zone === 'low' ? 'border-[#f85149]/30 text-[#f85149] bg-[#f85149]/5' : geometric[view].blend_zone === 'mid' ? 'border-[#d29922]/30 text-[#d29922] bg-[#d29922]/5' : 'border-[#3fb950]/30 text-[#3fb950] bg-[#3fb950]/5'">
-                                                    <span class="font-bold">Graduated Blend: </span><span
-                                                        x-text="geometric[view].blend_desc"></span>
-                                                </div>
-                                            </template>
-                                            <details class="text-[10px]">
-                                                <summary class="cursor-pointer text-[#8b949e] hover:text-[#c9d1d9]">
-                                                    Calibration details</summary>
-                                                <div class="mt-2 p-2 bg-[#0d1117] rounded text-[#8b949e] space-y-1">
-                                                    <p
-                                                        x-text="'true_ef = ' + geometric[view].calibration.slope + ' * area_ef + ' + geometric[view].calibration.intercept">
-                                                    </p>
-                                                    <p
-                                                        x-text="'Frames: ' + geometric[view].n_frames + ' | ED #' + geometric[view].ed_frame + ' (' + geometric[view].ed_area_pct + '%) | ES #' + geometric[view].es_frame + ' (' + geometric[view].es_area_pct + '%)'">
-                                                    </p>
-                                                </div>
-                                            </details>
+                                            <hr class="border-[#30363d] my-2" />
+                                            <p class="text-[10px] text-[#8b949e] leading-relaxed">
+                                                <strong>Normal:</strong> Smooth, rhythmic oscillation with deep troughs
+                                                (EF &gt; 55%).<br />
+                                                <strong>Reduced EF:</strong> Shallow troughs — the LV isn't contracting
+                                                enough.<br />
+                                                <strong>Irregular:</strong> Variable peaks may indicate arrhythmia or
+                                                imaging artifact.
+                                            </p>
+                                            <button @click="showTimelineInfo = false"
+                                                class="mt-2 text-[10px] text-[#58a6ff] hover:underline">Close</button>
                                         </div>
-                                    </template>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- TAB: MEDGEMMA AGENTIC PIPELINE -->
-                    <template x-if="activeTab === 'pipeline'">
-                        <div class="space-y-4">
-                            <div class="card p-4">
-                                <div class="flex items-center justify-between mb-4">
-                                    <div>
-                                        <h3 class="font-semibold text-white flex items-center gap-2">
-                                            <span>&#129504;</span> MedGemma Agentic Pipeline
-                                        </h3>
-                                        <p class="text-xs text-[#8b949e] mt-1">Measure &rarr; Geometric &rarr; Validate
-                                            &rarr; Narrate</p>
                                     </div>
-                                    <template x-if="pipelineResult"><span class="text-xs text-[#8b949e]"
-                                            x-text="'Total: ' + pipelineResult.total_elapsed_ms + 'ms'"></span></template>
                                 </div>
-                                <template x-if="loadingPipeline && !pipelineResult">
-                                    <div class="flex items-center gap-3 text-sm text-[#8b949e]">
-                                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                stroke-width="4" />
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                                        </svg>
-                                        Running MedGemma agentic pipeline...
+                                <div class="bg-[#0d1117] rounded-lg p-3" style="height: 200px;"
+                                    x-init="setTimeout(() => renderAreaChart(view), 500)">
+                                    <canvas :id="'area-chart-' + view" class="w-full h-full"></canvas>
+                                </div>
+                            </div>
+                            <!-- EF cards -->
+                            <div class="grid grid-cols-3 gap-3">
+                                <div class="card p-3 text-center border-[#3fb950]/30">
+                                    <p class="text-[10px] text-[#8b949e] uppercase">Geometric EF</p>
+                                    <p class="text-2xl font-bold text-[#3fb950]"
+                                        x-text="geometric[view].geometric_ef + '%'"></p>
+                                    <p class="text-[10px] text-[#8b949e]"
+                                        x-text="'Raw: ' + geometric[view].area_ef + '%'"></p>
+                                </div>
+                                <template x-if="geometric[view].regression_ef">
+                                    <div class="card p-3 text-center border-[#58a6ff]/30">
+                                        <p class="text-[10px] text-[#8b949e] uppercase">Regression EF
+                                        </p>
+                                        <p class="text-2xl font-bold text-[#58a6ff]"
+                                            x-text="geometric[view].regression_ef + '%'"></p>
+                                        <p class="text-[10px] text-[#8b949e]">8-specialist</p>
                                     </div>
                                 </template>
-                                <template x-if="pipelineResult">
-                                    <div class="space-y-1 slide-in">
-                                        <template x-for="step in pipelineResult.pipeline_steps" :key="step.stage">
-                                            <div class="pipeline-step pb-4">
-                                                <div class="pipeline-dot"
-                                                    :class="step.stage <= 2 ? 'bg-[#3fb950]' : 'bg-[#58a6ff]'"><span
-                                                        x-text="step.icon"></span></div>
-                                                <div class="card p-3 space-y-2">
-                                                    <div class="flex items-center justify-between">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="text-sm font-bold text-white"
-                                                                x-text="'Stage ' + step.stage + ': ' + step.name"></span>
-                                                            <span class="badge bg-[#21262d] text-[#8b949e]"
-                                                                x-text="step.elapsed_ms + 'ms'"></span>
-                                                        </div>
-                                                        <span class="text-[10px] text-[#8b949e] font-mono"
-                                                            x-text="step.engine"></span>
-                                                    </div>
-                                                    <p class="text-xs text-[#8b949e]" x-text="step.description"></p>
-                                                    <!-- Stage 1 -->
-                                                    <template x-if="step.stage === 1 && step.data">
-                                                        <div class="grid gap-2"
-                                                            :class="Object.keys(step.data).length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
-                                                            <template x-for="(vdata, vname) in step.data" :key="vname">
-                                                                <div class="bg-[#0d1117] rounded p-2 space-y-1">
-                                                                    <div class="flex items-center justify-between"><span
-                                                                            class="text-xs font-bold text-white"
-                                                                            x-text="vname"></span><span
-                                                                            class="text-sm font-bold"
-                                                                            :class="vdata.category === 'normal' ? 'text-[#3fb950]' : vdata.category === 'borderline' ? 'text-[#d29922]' : 'text-[#f85149]'"
-                                                                            x-text="vdata.ef + '%'"></span></div>
-                                                                    <div class="flex flex-wrap gap-1"><template
-                                                                            x-for="(sef, sname) in vdata.specialists"
-                                                                            :key="sname"><span
-                                                                                class="text-[10px] bg-[#161b22] px-1 rounded text-[#8b949e]"
-                                                                                x-text="sname.split('_')[0] + ':' + sef + '%'"></span></template>
-                                                                    </div>
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                    </template>
-                                                    <!-- Stage 1.5 -->
-                                                    <template x-if="step.stage === 1.5 && step.data">
-                                                        <div class="grid gap-2"
-                                                            :class="Object.keys(step.data).length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
-                                                            <template x-for="(gdata, gview) in step.data" :key="gview">
-                                                                <div class="bg-[#0d1117] rounded p-2">
-                                                                    <div class="flex items-center justify-between"><span
-                                                                            class="text-xs font-bold text-white"
-                                                                            x-text="gview"></span><span
-                                                                            class="text-sm font-bold text-[#3fb950]"
-                                                                            x-text="'Ensemble: ' + gdata.ensemble_ef + '%'"></span>
-                                                                    </div>
-                                                                    <div class="text-[10px] text-[#8b949e] mt-1"
-                                                                        x-text="'Area: ' + gdata.area_ef + '% \u2192 Cal: ' + gdata.calibrated_ef + '%'">
-                                                                    </div>
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                    </template>
-                                                    <!-- Stage 2 -->
-                                                    <template x-if="step.stage === 2 && step.data && step.data.verdict">
-                                                        <div class="bg-[#0d1117] rounded p-2 space-y-1">
-                                                            <div class="flex items-center gap-2"><span
-                                                                    class="text-xs text-[#8b949e]"
-                                                                    x-text="step.data.view + ' view'"></span><span
-                                                                    class="badge font-bold"
-                                                                    :class="step.data.verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : step.data.verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
-                                                                    x-text="step.data.verdict.toUpperCase()"></span><span
-                                                                    class="text-[10px] text-[#8b949e]"
-                                                                    x-text="'Conf: ' + (step.data.confidence_original * 100).toFixed(0) + '% \u2192 ' + (step.data.confidence_adjusted * 100).toFixed(0) + '%'"></span>
-                                                            </div>
-                                                            <p class="text-xs text-[#c9d1d9]"
-                                                                x-text="step.data.lv_description"></p>
-                                                        </div>
-                                                    </template>
-                                                    <!-- Stage 3 -->
-                                                    <template
-                                                        x-if="step.stage === 3 && step.data && step.data.narrative">
-                                                        <details>
-                                                            <summary
-                                                                class="cursor-pointer text-xs text-[#58a6ff] hover:text-[#79c0ff]">
-                                                                View clinical narrative</summary>
-                                                            <pre class="mt-2 p-3 bg-[#0d1117] rounded text-xs text-[#c9d1d9] whitespace-pre-wrap overflow-auto max-h-64"
-                                                                x-text="step.data.narrative"></pre>
-                                                        </details>
-                                                    </template>
-                                                    <!-- Stage 4 -->
-                                                    <template x-if="step.stage === 4 && step.data">
-                                                        <div class="flex items-center gap-4">
-                                                            <div class="p-2 rounded-lg"
-                                                                :style="`background:${efColor(step.data.final_category)}15;border:1px solid ${efColor(step.data.final_category)}40`">
-                                                                <span class="text-xs text-[#8b949e]">Final EF:
-                                                                </span><span class="text-xl font-bold"
-                                                                    :style="`color:${efColor(step.data.final_category)}`"
-                                                                    x-text="step.data.final_ef + '%'"></span>
-                                                            </div>
-                                                            <span class="badge"
-                                                                :style="`background:${efColor(step.data.final_category)}22;color:${efColor(step.data.final_category)}`"
-                                                                x-text="step.data.final_category"></span>
-                                                            <span class="badge"
-                                                                :class="step.data.vlm_verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : step.data.vlm_verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
-                                                                x-text="'VLM: ' + step.data.vlm_verdict"></span>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                        </template>
+                                <template x-if="geometric[view].ensemble_ef">
+                                    <div class="card p-3 text-center border-2"
+                                        :class="geometric[view].blend_zone === 'low' ? 'border-[#f85149]/50' : geometric[view].blend_zone === 'mid' ? 'border-[#d29922]/50' : 'border-[#3fb950]/50'">
+                                        <p class="text-[10px] text-[#8b949e] uppercase">Graduated
+                                            Ensemble</p>
+                                        <p class="text-2xl font-bold text-white"
+                                            x-text="geometric[view].ensemble_ef + '%'"></p>
+                                        <p class="text-[10px]"
+                                            :class="geometric[view].blend_zone === 'low' ? 'text-[#f85149]' : geometric[view].blend_zone === 'mid' ? 'text-[#d29922]' : 'text-[#3fb950]'"
+                                            x-text="'Geo: ' + (geometric[view].geo_weight * 100) + '%'">
+                                        </p>
                                     </div>
                                 </template>
                             </div>
-                            <!-- Architecture -->
-                            <div class="card p-4">
-                                <h3 class="font-semibold text-white mb-3">Architecture: MedGemma as Central Intelligence
-                                </h3>
-                                <div
-                                    class="bg-[#0d1117] rounded-lg p-4 text-xs font-mono text-[#8b949e] leading-relaxed overflow-x-auto">
-                                    <pre>
+                            <template x-if="geometric[view].blend_desc">
+                                <div class="p-2 rounded text-xs border"
+                                    :class="geometric[view].blend_zone === 'low' ? 'border-[#f85149]/30 text-[#f85149] bg-[#f85149]/5' : geometric[view].blend_zone === 'mid' ? 'border-[#d29922]/30 text-[#d29922] bg-[#d29922]/5' : 'border-[#3fb950]/30 text-[#3fb950] bg-[#3fb950]/5'">
+                                    <span class="font-bold">Graduated Blend: </span><span
+                                        x-text="geometric[view].blend_desc"></span>
+                                </div>
+                            </template>
+                            <details class="text-[10px]">
+                                <summary class="cursor-pointer text-[#8b949e] hover:text-[#c9d1d9]">
+                                    Calibration details</summary>
+                                <div class="mt-2 p-2 bg-[#0d1117] rounded text-[#8b949e] space-y-1">
+                                    <p
+                                        x-text="'true_ef = ' + geometric[view].calibration.slope + ' * area_ef + ' + geometric[view].calibration.intercept">
+                                    </p>
+                                    <p
+                                        x-text="'Frames: ' + geometric[view].n_frames + ' | ED #' + geometric[view].ed_frame + ' (' + geometric[view].ed_area_pct + '%) | ES #' + geometric[view].es_frame + ' (' + geometric[view].es_area_pct + '%)'">
+                                    </p>
+                                </div>
+                            </details>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- TAB: MEDGEMMA AGENTIC PIPELINE -->
+    <template x-if="activeTab === 'pipeline'">
+        <div class="space-y-4">
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-semibold text-white flex items-center gap-2">
+                            <span>&#129504;</span> MedGemma Agentic Pipeline
+                        </h3>
+                        <p class="text-xs text-[#8b949e] mt-1">Measure &rarr; Geometric &rarr; Validate
+                            &rarr; Narrate</p>
+                    </div>
+                    <template x-if="pipelineResult"><span class="text-xs text-[#8b949e]"
+                            x-text="'Total: ' + pipelineResult.total_elapsed_ms + 'ms'"></span></template>
+                </div>
+                <template x-if="loadingPipeline && !pipelineResult">
+                    <div class="flex items-center gap-3 text-sm text-[#8b949e]">
+                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        Running MedGemma agentic pipeline...
+                    </div>
+                </template>
+                <template x-if="pipelineResult">
+                    <div class="space-y-1 slide-in">
+                        <template x-for="step in pipelineResult.pipeline_steps" :key="step.stage">
+                            <div class="pipeline-step pb-4">
+                                <div class="pipeline-dot" :class="step.stage <= 2 ? 'bg-[#3fb950]' : 'bg-[#58a6ff]'">
+                                    <span x-text="step.icon"></span>
+                                </div>
+                                <div class="card p-3 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm font-bold text-white"
+                                                x-text="'Stage ' + step.stage + ': ' + step.name"></span>
+                                            <span class="badge bg-[#21262d] text-[#8b949e]"
+                                                x-text="step.elapsed_ms + 'ms'"></span>
+                                        </div>
+                                        <span class="text-[10px] text-[#8b949e] font-mono" x-text="step.engine"></span>
+                                    </div>
+                                    <p class="text-xs text-[#8b949e]" x-text="step.description"></p>
+                                    <!-- Stage 1 -->
+                                    <template x-if="step.stage === 1 && step.data">
+                                        <div class="grid gap-2"
+                                            :class="Object.keys(step.data).length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+                                            <template x-for="(vdata, vname) in step.data" :key="vname">
+                                                <div class="bg-[#0d1117] rounded p-2 space-y-1">
+                                                    <div class="flex items-center justify-between"><span
+                                                            class="text-xs font-bold text-white"
+                                                            x-text="vname"></span><span class="text-sm font-bold"
+                                                            :class="vdata.category === 'normal' ? 'text-[#3fb950]' : vdata.category === 'borderline' ? 'text-[#d29922]' : 'text-[#f85149]'"
+                                                            x-text="vdata.ef + '%'"></span></div>
+                                                    <div class="flex flex-wrap gap-1"><template
+                                                            x-for="(sef, sname) in vdata.specialists" :key="sname"><span
+                                                                class="text-[10px] bg-[#161b22] px-1 rounded text-[#8b949e]"
+                                                                x-text="sname.split('_')[0] + ':' + sef + '%'"></span></template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <!-- Stage 1.5 -->
+                                    <template x-if="step.stage === 1.5 && step.data">
+                                        <div class="grid gap-2"
+                                            :class="Object.keys(step.data).length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+                                            <template x-for="(gdata, gview) in step.data" :key="gview">
+                                                <div class="bg-[#0d1117] rounded p-2">
+                                                    <div class="flex items-center justify-between"><span
+                                                            class="text-xs font-bold text-white"
+                                                            x-text="gview"></span><span
+                                                            class="text-sm font-bold text-[#3fb950]"
+                                                            x-text="'Ensemble: ' + gdata.ensemble_ef + '%'"></span>
+                                                    </div>
+                                                    <div class="text-[10px] text-[#8b949e] mt-1"
+                                                        x-text="'Area: ' + gdata.area_ef + '% \u2192 Cal: ' + gdata.calibrated_ef + '%'">
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <!-- Stage 2 -->
+                                    <template x-if="step.stage === 2 && step.data && step.data.verdict">
+                                        <div class="bg-[#0d1117] rounded p-2 space-y-1">
+                                            <div class="flex items-center gap-2"><span class="text-xs text-[#8b949e]"
+                                                    x-text="step.data.view + ' view'"></span><span
+                                                    class="badge font-bold"
+                                                    :class="step.data.verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : step.data.verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
+                                                    x-text="step.data.verdict.toUpperCase()"></span><span
+                                                    class="text-[10px] text-[#8b949e]"
+                                                    x-text="'Conf: ' + (step.data.confidence_original * 100).toFixed(0) + '% \u2192 ' + (step.data.confidence_adjusted * 100).toFixed(0) + '%'"></span>
+                                            </div>
+                                            <p class="text-xs text-[#c9d1d9]" x-text="step.data.lv_description"></p>
+                                        </div>
+                                    </template>
+                                    <!-- Stage 3 -->
+                                    <template x-if="step.stage === 3 && step.data && step.data.narrative">
+                                        <details>
+                                            <summary class="cursor-pointer text-xs text-[#58a6ff] hover:text-[#79c0ff]">
+                                                View clinical narrative</summary>
+                                            <pre class="mt-2 p-3 bg-[#0d1117] rounded text-xs text-[#c9d1d9] whitespace-pre-wrap overflow-auto max-h-64"
+                                                x-text="step.data.narrative"></pre>
+                                        </details>
+                                    </template>
+                                    <!-- Stage 4 -->
+                                    <template x-if="step.stage === 4 && step.data">
+                                        <div class="flex items-center gap-4">
+                                            <div class="p-2 rounded-lg"
+                                                :style="`background:${efColor(step.data.final_category)}15;border:1px solid ${efColor(step.data.final_category)}40`">
+                                                <span class="text-xs text-[#8b949e]">Final EF:
+                                                </span><span class="text-xl font-bold"
+                                                    :style="`color:${efColor(step.data.final_category)}`"
+                                                    x-text="step.data.final_ef + '%'"></span>
+                                            </div>
+                                            <span class="badge"
+                                                :style="`background:${efColor(step.data.final_category)}22;color:${efColor(step.data.final_category)}`"
+                                                x-text="step.data.final_category"></span>
+                                            <span class="badge"
+                                                :class="step.data.vlm_verdict === 'agree' ? 'bg-[#3fb950]/20 text-[#3fb950]' : step.data.vlm_verdict === 'disagree' ? 'bg-[#f85149]/20 text-[#f85149]' : 'bg-[#d29922]/20 text-[#d29922]'"
+                                                x-text="'VLM: ' + step.data.vlm_verdict"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <!-- Architecture -->
+            <div class="card p-4">
+                <h3 class="font-semibold text-white mb-3">Architecture: MedGemma as Central Intelligence
+                </h3>
+                <div
+                    class="bg-[#0d1117] rounded-lg p-4 text-xs font-mono text-[#8b949e] leading-relaxed overflow-x-auto">
+                    <pre>
  EchoGuard-Peds Agentic Pipeline
  ================================
  Echo Video --+--&gt; VideoMAE Encoder (768-d) --&gt; 8 Specialists --&gt; Ensemble EF
@@ -1057,20 +1092,20 @@
                    AGREE/DISAGREE                    |
                    Confidence Adj.                   v
                                             Clinical Report</pre>
-                                </div>
-                                <p class="text-[10px] text-[#8b949e] mt-2">
-                                    MedGemma serves as <strong class="text-[#58a6ff]">visual validator</strong> and
-                                    <strong class="text-[#bc8cff]">clinical narrator</strong>. Geometric EF provides
-                                    <strong class="text-[#3fb950]">70.1% abnormal sensitivity</strong> &mdash; highest
-                                    of any method.
-                                </p>
-                            </div>
-                        </div>
-                    </template>
-
                 </div>
-            </template>
-        </main>
+                <p class="text-[10px] text-[#8b949e] mt-2">
+                    MedGemma serves as <strong class="text-[#58a6ff]">visual validator</strong> and
+                    <strong class="text-[#bc8cff]">clinical narrator</strong>. Geometric EF provides
+                    <strong class="text-[#3fb950]">70.1% abnormal sensitivity</strong> &mdash; highest
+                    of any method.
+                </p>
+            </div>
+        </div>
+    </template>
+
+    </div>
+    </template>
+    </main>
     </div>
 
     <!-- ALPINE APP -->
@@ -1100,6 +1135,9 @@
                     // Clear previous seg timers
                     for (const t of Object.values(this._segTimers)) clearInterval(t);
                     this._segTimers = {}; this.segFrames = {}; this.segAreas = {}; this.segIdx = {}; this.segPlaying = {}; this.segOverlayColor = {};
+                    // Destroy old Chart.js instances before DOM is torn down
+                    for (const c of Object.values(this._charts)) { try { c.destroy(); } catch { } }
+                    this._charts = {};
                     this.selected = p; this.analysis = null; this.vlm = { A4C: null, PSAX: null }; this.videoError = { A4C: false, PSAX: false }; this.frames = {}; this.geometric = {}; this.pipelineResult = null; this.activeTab = 'roundtable'; this.loadingAnalysis = true;
                     const tasks = [this.runAnalysis(p.patient_id)];
                     for (const view of p.views) { if (p.has_video && p.has_video[view]) tasks.push(this.loadFrames(p.patient_id, view)); }
@@ -1127,15 +1165,25 @@
                         const r = await fetch('/api/narrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patient_id: this.selected.patient_id }) }); if (r.ok) this.pipelineResult = await r.json();
                     } catch (e) { console.error('Pipeline failed:', e); } finally { this.loadingPipeline = false; }
                 },
-                renderAreaChart(view) {
-                    const data = this.geometric[view]; if (!data || !data.lv_areas) return;
-                    const canvas = document.getElementById('area-chart-' + view); if (!canvas) return;
-                    // Chart.js needs non-zero dimensions — retry if canvas isn't visible yet
-                    if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
-                        setTimeout(() => this.renderAreaChart(view), 100);
+                renderAreaChart(view, _attempt) {
+                    const attempt = _attempt || 0;
+                    const data = this.geometric[view]; if (!data || !data.lv_areas) {
+                        // Data not loaded yet — retry up to 20 times (2 seconds)
+                        if (attempt < 20) setTimeout(() => this.renderAreaChart(view, attempt + 1), 100);
                         return;
                     }
-                    if (this._charts[view]) this._charts[view].destroy();
+                    const canvas = document.getElementById('area-chart-' + view);
+                    if (!canvas) {
+                        // Canvas not in DOM yet — retry up to 20 times
+                        if (attempt < 20) setTimeout(() => this.renderAreaChart(view, attempt + 1), 100);
+                        return;
+                    }
+                    // Chart.js needs non-zero dimensions — retry if canvas isn't visible yet
+                    if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+                        if (attempt < 20) setTimeout(() => this.renderAreaChart(view, attempt + 1), 150);
+                        return;
+                    }
+                    try { if (this._charts[view]) this._charts[view].destroy(); } catch { }
                     this._charts[view] = new Chart(canvas.getContext('2d'), {
                         type: 'line',
                         data: {
