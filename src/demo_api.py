@@ -107,6 +107,32 @@ def _sanitize(obj):
     return obj
 
 
+def _offload_models_to_cpu():
+    """Move specialist & segmentation models to CPU to free MPS memory for VLM."""
+    import torch
+    if _engine is not None:
+        for key, model in _engine._models.items():
+            model.cpu()
+        logger.info("Offloaded specialist models to CPU")
+    for view, model in _seg_models.items():
+        model.cpu()
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+    logger.info("MPS memory freed for VLM")
+
+
+def _reload_models_to_mps():
+    """Move specialist & segmentation models back to MPS after VLM is done."""
+    import torch
+    device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    if _engine is not None:
+        for key, model in _engine._models.items():
+            model.to(device)
+        logger.info("Reloaded specialist models to %s", device)
+    for view, model in _seg_models.items():
+        model.to(device)
+
+
 _SEVERITY_ORDER = ["critical", "reduced", "borderline_low", "normal", "borderline_high", "hyperdynamic", "unknown"]
 _SEVERITY_COLORS = {
     "critical":      "#f85149",
@@ -245,6 +271,10 @@ async def startup():
         if path.exists():
             with open(path) as f:
                 _manifests[view] = json.load(f)
+            # Resolve relative embedding_path entries to absolute paths
+            for vid, meta in _manifests[view].items():
+                if "embedding_path" in meta and not os.path.isabs(meta["embedding_path"]):
+                    meta["embedding_path"] = str(PROJECT_ROOT / meta["embedding_path"])
     logger.info("✓  Manifests: %s", {v: len(m) for v, m in _manifests.items()})
 
     # Build patient-prefix → {view: video_id} map for cross-view linking
@@ -259,7 +289,12 @@ async def startup():
     # Load segmentation models + calibrations for geometric EF
     from echoguard.regression.geometric_ef import load_segmentation_model, CHECKPOINTS, CALIBRATION_FILES
     import torch
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     for view in ["A4C", "PSAX"]:
         ckpt = Path(CHECKPOINTS[view])
         cal_path = Path(CALIBRATION_FILES[view])
@@ -763,6 +798,8 @@ async def narrate(req: NarrateRequest):
             try:
                 if _critic is None:
                     logger.info("Loading MedGemma 4B VLM for narration…")
+                    # Free MPS memory: move specialist & segmentation models to CPU
+                    _offload_models_to_cpu()
                     from echoguard.vlm_critic import VLMCritic
                     _critic = VLMCritic()
 
@@ -784,6 +821,12 @@ async def narrate(req: NarrateRequest):
             except Exception as e:
                 logger.error("narrate stage 2: %s", e)
                 vlm_data = {"error": str(e)}
+            finally:
+                # Free VLM memory and restore specialist models to MPS
+                if _critic is not None:
+                    _critic.unload()
+                    _critic = None
+                _reload_models_to_mps()
 
     pipeline_steps.append({
         "stage": 2,

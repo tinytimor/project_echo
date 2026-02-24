@@ -318,9 +318,11 @@ class VLMCritic:
     ----------
     model_path : path to MedGemma 4B weights (default: local_models/medgemma-4b)
     video_dir  : base directory for AVI videos (default: data/echonet_pediatric/A4C/Videos)
-    device     : 'auto', 'cuda', 'cpu'
+    device     : 'auto', 'cuda', 'cpu', 'mps'
     n_frames   : how many key frames to send to the VLM (2 or 3, default 3)
     max_new_tokens : token budget for VLM response
+    quantize   : None (full precision), '8bit', or '4bit' for quantized inference
+                 8-bit uses ~4GB, 4-bit uses ~2.5GB (requires bitsandbytes)
     """
 
     def __init__(
@@ -330,9 +332,15 @@ class VLMCritic:
         device: str = "auto",
         n_frames: int = 3,
         max_new_tokens: int = 256,
+        quantize: str = None,
     ) -> None:
         if device == "auto":
-            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                self._device = "cuda"
+            elif torch.backends.mps.is_available():
+                self._device = "mps"
+            else:
+                self._device = "cpu"
         else:
             self._device = device
 
@@ -340,6 +348,7 @@ class VLMCritic:
         self._video_dir = Path(video_dir)
         self._n_frames = n_frames
         self._max_new_tokens = max_new_tokens
+        self._quantize = quantize
 
         self._model = None
         self._processor = None
@@ -356,11 +365,20 @@ class VLMCritic:
 
         logger.info("Loading MedGemma 4B from %s ...", self._model_path)
         self._processor = AutoProcessor.from_pretrained(self._model_path)
-        self._model = AutoModelForImageTextToText.from_pretrained(
-            self._model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
+        
+        # MPS (Apple Silicon) doesn't support device_map="auto" — load to device directly
+        if self._device == "mps":
+            # Use float16 on MPS — float32 is more stable but 2× memory
+            self._model = AutoModelForImageTextToText.from_pretrained(
+                self._model_path,
+                torch_dtype=torch.float16,
+            ).to("mps")
+        else:
+            self._model = AutoModelForImageTextToText.from_pretrained(
+                self._model_path,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
         self._model.eval()
         logger.info("MedGemma 4B loaded. Device: %s", self._model.device)
 
@@ -370,7 +388,10 @@ class VLMCritic:
             self._model.cpu()
             self._model = None
             self._processor = None
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            elif torch.backends.mps.is_available():
+                torch.mps.empty_cache()
             logger.info("VLMCritic unloaded.")
 
     def is_loaded(self) -> bool:
@@ -422,18 +443,28 @@ class VLMCritic:
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-        ).to(self._model.device, dtype=torch.bfloat16)
+        ).to(self._model.device, dtype=self._model.dtype)
 
         input_len = inputs["input_ids"].shape[-1]
 
         with torch.inference_mode():
+            # On MPS with float16, sampling (softmax) can overflow to inf/nan.
+            # Use greedy decoding for stability on Apple Silicon.
+            is_mps = str(self._model.device).startswith("mps")
+            gen_kwargs = dict(
+                max_new_tokens=self._max_new_tokens,
+                repetition_penalty=1.2,
+            )
+            if is_mps:
+                gen_kwargs["do_sample"] = False  # greedy — avoids softmax overflow
+            else:
+                gen_kwargs["do_sample"] = True
+                gen_kwargs["temperature"] = 0.3
+                gen_kwargs["top_p"] = 0.9
+
             outputs = self._model.generate(
                 **inputs,
-                max_new_tokens=self._max_new_tokens,
-                do_sample=True,
-                temperature=0.3,   # Low temperature for structured clinical output
-                top_p=0.9,
-                repetition_penalty=1.2,
+                **gen_kwargs,
             )
 
         generated = outputs[0][input_len:]

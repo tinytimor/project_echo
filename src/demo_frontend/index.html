@@ -836,8 +836,7 @@
                                                     LV Area Timeline</p>
                                                 <div class="bg-[#0d1117] rounded-lg p-3" style="height: 200px;"><canvas
                                                         :id="'area-chart-' + view" class="w-full h-full"></canvas></div>
-                                                <div x-init="$nextTick(() => renderAreaChart(view))"
-                                                    x-effect="geometric[view] && renderAreaChart(view)"></div>
+                                                <div x-effect="if (geometric[view] && geometric[view].lv_areas) { $nextTick(() => renderAreaChart(view)); }"></div>
                                             </div>
                                             <!-- EF cards -->
                                             <div class="grid grid-cols-3 gap-3">
@@ -1131,6 +1130,11 @@
                 renderAreaChart(view) {
                     const data = this.geometric[view]; if (!data || !data.lv_areas) return;
                     const canvas = document.getElementById('area-chart-' + view); if (!canvas) return;
+                    // Chart.js needs non-zero dimensions — retry if canvas isn't visible yet
+                    if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+                        setTimeout(() => this.renderAreaChart(view), 100);
+                        return;
+                    }
                     if (this._charts[view]) this._charts[view].destroy();
                     this._charts[view] = new Chart(canvas.getContext('2d'), {
                         type: 'line',

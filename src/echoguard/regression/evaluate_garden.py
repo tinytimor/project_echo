@@ -31,7 +31,6 @@ from torch.utils.data import DataLoader
 
 from echoguard.config import PROJECT_ROOT, ef_category, age_group, PEDIATRIC_EF_NORMS
 from echoguard.confidence import compute_confidence
-from echoguard.evaluation import evaluate, print_evaluation
 from echoguard.zscore import ZScoreFlag, compute_ef_zscore
 from echoguard.regression.model import EFRegressor, EFRegressorV2, EFRegressorWithMeta
 from echoguard.regression.model_garden import (
@@ -266,6 +265,7 @@ def run_evaluation(
         class_probs = None
 
     # ----- Standard regression metrics -----
+    from echoguard.evaluation import evaluate, print_evaluation
     result = evaluate(y_true, y_pred, ages, tier=f"garden_{model_type}_{view.lower()}")
     print_evaluation(result)
 

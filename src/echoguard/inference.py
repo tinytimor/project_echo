@@ -382,7 +382,12 @@ class EchoGuardInference:
         use_ensemble: bool = True,
     ) -> None:
         if device == "auto":
-            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                self._device = "cuda"
+            elif torch.backends.mps.is_available():
+                self._device = "mps"
+            else:
+                self._device = "cpu"
         else:
             self._device = device
 

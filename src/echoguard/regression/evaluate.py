@@ -21,7 +21,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from echoguard.config import DataConfig, PROJECT_ROOT, ef_category
-from echoguard.evaluation import evaluate, print_evaluation, EvaluationResult
 from echoguard.regression.model import EFRegressor, EFRegressorV2, EFRegressorWithMeta
 from echoguard.regression.train import EFEmbeddingDataset
 
@@ -171,6 +170,7 @@ def run_evaluation(
     ages = np.array(all_ages)
 
     # Run evaluation using shared framework
+    from echoguard.evaluation import evaluate, print_evaluation, EvaluationResult
     result = evaluate(y_true, y_pred, ages, tier=f"regression_{view.lower()}")
     print_evaluation(result)
 

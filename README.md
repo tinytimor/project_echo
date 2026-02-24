@@ -286,7 +286,9 @@ The final output is a **structured pediatric echo report** with:
 
 ### 1. Build the Virtual Environment
 
-Requires **Python 3.10+** and an NVIDIA GPU with CUDA 12.x.
+Requires **Python 3.10+** and a supported GPU:
+- **NVIDIA GPU** with CUDA 12.x (recommended for training + inference)
+- **Apple Silicon** (M1/M2/M3/M4) via MPS (inference and demo only)
 
 ```bash
 cd project_echo
@@ -295,15 +297,18 @@ cd project_echo
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install PyTorch with CUDA support (adjust for your CUDA version)
+# Install PyTorch — choose one:
+# CUDA (Linux/Windows with NVIDIA GPU):
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# Apple Silicon (macOS):
+pip install torch torchvision
 
 # Install the package in editable mode (installs all dependencies from pyproject.toml)
 pip install -e .
 
 # Verify installation
 python -c "import echoguard; print('echoguard installed successfully')"
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, MPS: {torch.backends.mps.is_available()}')"
 ```
 
 Key dependencies installed by `pip install -e .`:
@@ -424,14 +429,39 @@ torch.save({
 
 ### 5. Run the Demo
 
+Once all data and models are in place, start the interactive demo:
+
 ```bash
-# Start the FastAPI backend (from src/ directory)
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Start the FastAPI backend
 cd src && uvicorn demo_api:app --host 0.0.0.0 --port 8000 --reload
 
-# Or with PYTHONPATH set:
-PYTHONPATH=src uvicorn src.demo_api:app --host 0.0.0.0 --port 8000 --reload
-
 # Open http://localhost:8000 in your browser
+```
+
+**Prerequisites checklist** (the server validates all of these at startup):
+
+| Requirement | Path | Notes |
+|---|---|---|
+| Trained checkpoints (8 specialists) | `checkpoints/regression_videomae_*/` | Each contains `best_model.pt` |
+| Segmentation models (2) | `checkpoints/lv_seg_deeplabv3.pt`, `lv_seg_psax_deeplabv3.pt` | DeepLabV3 for geometric EF |
+| Geometric calibrations (2) | `checkpoints/a4c_geo_calibration.json`, `psax_geo_calibration.json` | Linear calibration coefficients |
+| VideoMAE embeddings | `data/embeddings_videomae/{pediatric_a4c,pediatric_psax}/` | `.pt` files + `manifest.json` |
+| Echo videos | `data/echonet_pediatric/{A4C,PSAX}/Videos/` | 7,810 `.avi` files from Stanford AIMI |
+| MedGemma 4B (optional) | `local_models/medgemma-4b/` | Required only for VLM validation layer |
+
+**Device auto-detection:** The backend automatically selects CUDA → MPS → CPU.
+On Apple Silicon, specialists run on MPS with automatic memory management
+(VLM is offloaded/reloaded to stay within unified memory limits).
+
+**What you'll see at startup:**
+```
+INFO:     Loaded 4,467 patients (A4C: 3284, PSAX: 4526) ...
+INFO:     8 specialists on [cuda/mps/cpu]
+INFO:     2 segmentation models loaded
+INFO:     VLM: [READY/UNAVAILABLE]
 ```
 
 ---
@@ -539,12 +569,12 @@ project_echo/
 
 ## Hardware Requirements
 
-| Resource | Requirement |
-|---|---|
-| **GPU** | NVIDIA RTX 5090 (32 GB VRAM) or equivalent |
-| **RAM** | 32 GB minimum |
-| **Storage** | ~12 GB (models + dataset + checkpoints) |
-| **CUDA** | 12.x with BF16 support |
+| Resource | CUDA (Training + Inference) | Apple Silicon (Inference Only) |
+|---|---|---|
+| **GPU** | NVIDIA RTX 5090 (32 GB VRAM) or equivalent | M1/M2/M3/M4 (16+ GB unified memory) |
+| **RAM** | 32 GB minimum | 16 GB minimum (32 GB recommended) |
+| **Storage** | ~12 GB (models + dataset + checkpoints) | ~12 GB |
+| **Framework** | CUDA 12.x with BF16 support | PyTorch MPS backend |
 
 ## Competition
 

@@ -574,12 +574,111 @@ correctly regardless of working directory.
 
 ## 8. Hardware Requirements
 
-| Resource | Requirement |
-|---|---|
-| **GPU** | NVIDIA RTX 5090 (32 GB VRAM) or equivalent |
-| **RAM** | 32 GB minimum |
-| **Storage** | ~12 GB (models + dataset + checkpoints) |
-| **CUDA** | 12.x with BF16 support |
+| Resource | CUDA (Training + Inference) | Apple Silicon (Inference Only) |
+|---|---|---|
+| **GPU** | NVIDIA RTX 5090 (32 GB VRAM) or equivalent | M1/M2/M3/M4 (16+ GB unified memory) |
+| **RAM** | 32 GB minimum | 16 GB minimum (32 GB recommended) |
+| **Storage** | ~12 GB (models + dataset + checkpoints) | ~12 GB |
+| **Framework** | CUDA 12.x with BF16 support | PyTorch MPS backend |
+
+---
+
+## 8.5 Running the Demo (Backend + Frontend)
+
+### Prerequisites
+
+Ensure all data and models are downloaded and in the expected locations:
+
+```
+project_echo/
+├── .venv/                               # Python 3.10+ virtual environment
+├── local_models/medgemma-4b/            # MedGemma 4B weights (optional, for VLM layer)
+├── data/
+│   ├── echonet_pediatric/
+│   │   ├── A4C/Videos/                  # 3,284 .avi files
+│   │   └── PSAX/Videos/                 # 4,526 .avi files
+│   └── embeddings_videomae/
+│       ├── pediatric_a4c/               # .pt embeddings + manifest.json
+│       └── pediatric_psax/              # .pt embeddings + manifest.json
+└── checkpoints/
+    ├── regression_videomae_tcn_a4c/     # 8 specialist checkpoints (each has best_model.pt)
+    ├── regression_videomae_a4c/
+    ├── regression_videomae_multitask_a4c/
+    ├── regression_videomae_mlp_a4c/
+    ├── regression_videomae_psax/
+    ├── regression_videomae_tcn_psax/
+    ├── regression_videomae_multitask_psax/
+    ├── regression_videomae_mlp_psax/
+    ├── lv_seg_deeplabv3.pt              # A4C segmentation (IoU 0.809)
+    ├── lv_seg_psax_deeplabv3.pt         # PSAX segmentation (IoU 0.828)
+    ├── a4c_geo_calibration.json         # Geometric EF calibration
+    └── psax_geo_calibration.json
+```
+
+### Setup
+
+```bash
+cd project_echo
+
+# Create virtual environment (first time only)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install PyTorch — choose one:
+# CUDA (Linux/Windows):
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# Apple Silicon (macOS):
+pip install torch torchvision
+
+# Install project in editable mode
+pip install -e .
+```
+
+### Start the Server
+
+```bash
+source .venv/bin/activate
+cd src
+uvicorn demo_api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open **http://localhost:8000** in your browser.
+
+### What Happens at Startup
+
+1. **Patient manifests** are loaded from `data/embeddings_videomae/*/manifest.json`
+   (embedding paths are resolved to absolute paths automatically).
+2. **8 specialist models** (TCN, Temporal, MultiTask, MLP × A4C/PSAX) are loaded
+   onto the detected device (CUDA → MPS → CPU).
+3. **2 DeepLabV3 segmentation models** and **2 geometric calibrations** are loaded.
+4. **MedGemma 4B VLM** availability is checked (loaded on-demand during narration).
+
+Expected startup log:
+```
+INFO:     Loaded 4,467 patients (A4C: 3284, PSAX: 4526) ...
+INFO:     8 specialists on [cuda/mps/cpu]
+INFO:     2 segmentation models loaded
+INFO:     VLM: [READY/UNAVAILABLE]
+```
+
+### Apple Silicon Memory Management
+
+On MPS devices with limited unified memory (e.g., 16–24 GB), the backend
+automatically manages GPU memory for the VLM:
+
+- Before VLM inference: specialist models are offloaded to CPU
+- After VLM inference: specialists are reloaded back to MPS
+- VLM uses float16 with greedy decoding (avoids softmax overflow on MPS)
+
+### Demo UI Features
+
+- **Patient browser:** Search/filter 7,810 patients by ID, view, EF range
+- **Regression EF:** 8-specialist ensemble prediction with confidence intervals
+- **Geometric EF:** DeepLabV3 segmentation overlay + area-based EF cross-check
+- **LV Area Timeline:** Animated chart of LV area across all video frames
+- **VLM Validation:** MedGemma "Senior Attending" reviews ED/mid/ES frames
+  (click "Generate Narrative" — takes ~4 minutes on MPS, ~30s on A100)
+- **Clinical Report:** Age-adjusted Z-scores, dual-view fusion, full narrative
 
 ---
 
